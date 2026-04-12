@@ -1,0 +1,106 @@
+// Version: 1.0.0
+type AdConfig__822000622 =
+  {
+    adType : AdType__465735473;
+    id : AdId__711017315;
+    imageUrl : ?Text;
+    isEnabled : Bool;
+    name : Text;
+    placement : AdPlacement__140712012;
+    targetUrl : ?Text;
+    videoUrl : ?Text
+  };
+type AdId__711017315 = Text;
+type AdPlacement__140712012 = {#homepage; #midRoll; #postRoll; #preRoll};
+type AdType__465735473 = {#banner; #video};
+type AnimeId__656068571 = Text;
+type AnimeRequest__85111995 =
+  {
+    createdAt : Timestamp__550690431;
+    id : Text;
+    requestText : Text;
+    status : Text;
+    username : Text
+  };
+type Anime__240298088 =
+  {
+    coverImageUrl : Text;
+    createdAt : Timestamp__301639476;
+    description : Text;
+    genres : [Text];
+    id : AnimeId__656068571;
+    isFeatured : Bool;
+    rating : Float;
+    title : Text;
+    viewCount : Nat
+  };
+type Comment__804484252 =
+  {
+    authorId : Principal;
+    authorUsername : Text;
+    createdAt : Timestamp__923019195;
+    episodeId : Text;
+    id : Text;
+    isDeleted : Bool;
+    parentId : ?Text;
+    text : Text;
+    updatedAt : ?Timestamp__923019195
+  };
+type EpisodeId__995057067 = Text;
+type Episode__747196338 =
+  {
+    animeId : AnimeId__656068571;
+    createdAt : Timestamp__301639476;
+    description : Text;
+    duration : ?Text;
+    episodeNumber : Nat;
+    id : EpisodeId__995057067;
+    seasonId : ?SeasonId__369790761;
+    thumbnailUrl : ?Text;
+    title : Text;
+    videoUrl : Text
+  };
+type Rating__966149626 = {episodeId : Text; stars : Nat; userId : Principal};
+type SeasonId__369790761 = Text;
+type Season__934670219 =
+  {
+    animeId : AnimeId__656068571;
+    createdAt : Timestamp__301639476;
+    id : SeasonId__369790761;
+    name : Text;
+    seasonNumber : Nat
+  };
+type Timestamp__301639476 = Int;
+type Timestamp__550690431 = Int;
+type Timestamp__923019195 = Timestamp__301639476;
+type User__933515552 =
+  {
+    createdAt : Timestamp__301639476;
+    email : ?Text;
+    id : Principal;
+    isAdmin : Bool;
+    username : Text
+  };
+type WatchlistEntry__727695593 =
+  {
+    addedAt : Timestamp__301639476;
+    animeId : AnimeId__656068571;
+    userId : Principal
+  };
+actor {
+  stable var ads : [AdConfig__822000622];
+  stable var animeRequests : [AnimeRequest__85111995];
+  stable var animes : [Anime__240298088];
+  stable var comments : [Comment__804484252];
+  stable var episodes : [Episode__747196338];
+  stable var nextAdId : Nat;
+  stable var nextAnimeId : Nat;
+  stable var nextCommentId : Nat;
+  stable var nextEpisodeId : Nat;
+  stable var nextSeasonId : Nat;
+  stable var ratings : [Rating__966149626];
+  stable var seasons : [Season__934670219];
+  stable var seeded : Bool;
+  stable var users : [User__933515552];
+  stable var watchlist : [WatchlistEntry__727695593]
+};

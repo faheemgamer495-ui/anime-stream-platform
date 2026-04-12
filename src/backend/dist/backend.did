@@ -1,0 +1,193 @@
+type WatchlistEntry = 
+ record {
+   addedAt: Timestamp;
+   animeId: AnimeId;
+   userId: principal;
+ };
+type UserPublic = 
+ record {
+   createdAt: Timestamp;
+   email: opt text;
+   id: principal;
+   isAdmin: bool;
+   username: text;
+ };
+type UserInput = 
+ record {
+   email: opt text;
+   username: text;
+ };
+type Timestamp = int;
+type SeasonPublic = 
+ record {
+   animeId: AnimeId;
+   createdAt: Timestamp;
+   id: SeasonId;
+   name: text;
+   seasonNumber: nat;
+ };
+type SeasonInput = 
+ record {
+   animeId: AnimeId;
+   name: text;
+   seasonNumber: nat;
+ };
+type SeasonId = text;
+type EpisodeInput = 
+ record {
+   animeId: AnimeId;
+   description: text;
+   duration: opt text;
+   episodeNumber: nat;
+   seasonId: opt SeasonId;
+   thumbnailUrl: opt text;
+   title: text;
+   videoUrl: text;
+ };
+type EpisodeId = text;
+type Episode = 
+ record {
+   animeId: AnimeId;
+   createdAt: Timestamp;
+   description: text;
+   duration: opt text;
+   episodeNumber: nat;
+   id: EpisodeId;
+   seasonId: opt SeasonId;
+   thumbnailUrl: opt text;
+   title: text;
+   videoUrl: text;
+ };
+type Comment = 
+ record {
+   authorId: principal;
+   authorUsername: text;
+   createdAt: Timestamp;
+   episodeId: text;
+   id: text;
+   isDeleted: bool;
+   parentId: opt text;
+   "text": text;
+   updatedAt: opt Timestamp;
+ };
+type AnimeRequest = 
+ record {
+   createdAt: Timestamp;
+   id: text;
+   requestText: text;
+   status: text;
+   username: text;
+ };
+type AnimePublic = 
+ record {
+   coverImageUrl: text;
+   createdAt: Timestamp;
+   description: text;
+   genres: vec text;
+   id: AnimeId;
+   isFeatured: bool;
+   rating: float64;
+   title: text;
+   viewCount: nat;
+ };
+type AnimeInput = 
+ record {
+   coverImageUrl: text;
+   description: text;
+   genres: vec text;
+   isFeatured: bool;
+   rating: float64;
+   title: text;
+ };
+type AnimeId = text;
+type AdType = 
+ variant {
+   banner;
+   video;
+ };
+type AdPlacement = 
+ variant {
+   homepage;
+   midRoll;
+   postRoll;
+   preRoll;
+ };
+type AdId = text;
+type AdConfigPublic = 
+ record {
+   adType: AdType;
+   id: AdId;
+   imageUrl: opt text;
+   isEnabled: bool;
+   name: text;
+   placement: AdPlacement;
+   targetUrl: opt text;
+   videoUrl: opt text;
+ };
+type AdConfigInput = 
+ record {
+   adType: AdType;
+   imageUrl: opt text;
+   isEnabled: bool;
+   name: text;
+   placement: AdPlacement;
+   targetUrl: opt text;
+   videoUrl: opt text;
+ };
+service : {
+  addComment: (episodeId: text, "text": text, parentId: opt text) ->
+   (Comment);
+  addRating: (episodeId: text, stars: nat) -> (opt text);
+  addToWatchlist: (animeId: text) -> ();
+  aiChat: (userMessage: text, pageContext: text, errorContext: text) ->
+   (text);
+  createAdConfig: (input: AdConfigInput) -> (AdConfigPublic);
+  createAnime: (input: AnimeInput) -> (AnimePublic);
+  createEpisode: (adminToken: text, input: EpisodeInput) -> (Episode);
+  createSeason: (adminToken: text, input: SeasonInput) -> (SeasonPublic);
+  deleteAdConfig: (id: text) -> (bool);
+  deleteAnime: (id: text) -> (bool);
+  deleteAnimeRequest: (id: text, adminToken: text) -> (bool);
+  deleteComment: (commentId: text) -> (bool);
+  deleteEpisode: (adminToken: text, id: text) -> (bool);
+  deleteSeason: (adminToken: text, id: SeasonId) -> (bool);
+  editComment: (commentId: text, newText: text) -> (opt Comment);
+  filterAnimeByGenre: (genre: text) -> (vec AnimePublic) query;
+  getAdsByPlacement: (placement: AdPlacement) -> (vec AdConfigPublic) query;
+  getAllAds: () -> (vec AdConfigPublic) query;
+  getAllAnime: () -> (vec AnimePublic) query;
+  getAnime: (id: text) -> (opt AnimePublic) query;
+  getAnimeRequests: (adminToken: text) -> (vec AnimeRequest) query;
+  getCommentsByEpisode: (episodeId: text) -> (vec Comment) query;
+  getEnabledAds: () -> (vec AdConfigPublic) query;
+  getEpisode: (id: text) -> (opt Episode) query;
+  getEpisodesByAnime: (animeId: text) -> (vec Episode) query;
+  getEpisodesBySeason: (seasonId: SeasonId) -> (vec Episode) query;
+  getFeaturedAnime: () -> (vec AnimePublic) query;
+  getRatingsInfo: (episodeId: text) ->
+   (record {
+      average: float64;
+      total: nat;
+      userRating: opt nat;
+    }) query;
+  getSeason: (id: SeasonId) -> (opt SeasonPublic) query;
+  getSeasonsByAnime: (animeId: AnimeId) -> (vec SeasonPublic) query;
+  getUser: () -> (opt UserPublic) query;
+  getUserWatchlist: () -> (vec WatchlistEntry) query;
+  incrementAnimeViewCount: (id: text) -> ();
+  isAdminUser: () -> (bool) query;
+  isInWatchlist: (animeId: text) -> (bool) query;
+  listAllUsers: () -> (vec UserPublic) query;
+  markRequestComplete: (id: text, adminToken: text) -> (bool);
+  registerUser: (input: UserInput) -> (UserPublic);
+  removeFromWatchlist: (animeId: text) -> (bool);
+  searchAnime: (term: text) -> (vec AnimePublic) query;
+  submitAnimeRequest: (requestText: text, username: text) -> (text);
+  updateAdConfig: (id: text, input: AdConfigInput) -> (opt AdConfigPublic);
+  updateAnime: (id: text, input: AnimeInput) -> (opt AnimePublic);
+  updateEpisode: (adminToken: text, id: text, input: EpisodeInput) ->
+   (opt Episode);
+  updateSeason: (adminToken: text, id: SeasonId, input: SeasonInput) ->
+   (opt SeasonPublic);
+  updateUser: (input: UserInput) -> (opt UserPublic);
+}

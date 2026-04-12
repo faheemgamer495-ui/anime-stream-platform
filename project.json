@@ -1,0 +1,27 @@
+{
+  "overview": "A Netflix-style anime OTT streaming platform on the Internet Computer with season management, custom video player, admin panel, AI chat assistant, episode comments, and ratings.",
+  "features": [
+    "Season management (create, edit, delete seasons per anime)",
+    "Season selector tabs/dropdown on watch page",
+    "Dynamic episode filtering by season",
+    "Admin panel season management with episode linking",
+    "URL-based season navigation (/watch/animeId/seasonNumber/episodeId)",
+    "Custom video player with Google Drive, YouTube, direct URL support",
+    "Admin panel for anime, episodes, seasons, and requests",
+    "AI chat assistant with OpenAI integration",
+    "Episode comments and star ratings with threaded replies",
+    "Netflix-style dark UI with red accent",
+    "localStorage + Motoko stable storage persistence"
+  ],
+  "category": "entertainment",
+  "tags": [
+    "anime",
+    "streaming",
+    "video",
+    "seasons",
+    "admin",
+    "dark-mode",
+    "internet-computer"
+  ],
+  "last_updated": "2026-04-12T08:16:50.356Z"
+}
