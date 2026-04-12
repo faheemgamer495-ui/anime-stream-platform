@@ -1,29 +1,5 @@
-import {
-  loadConfig,
-  useActor,
-  useInternetIdentity,
-} from "@caffeineai/core-infrastructure";
-import { StorageClient } from "@caffeineai/object-storage";
-import { HttpAgent } from "@icp-sdk/core/agent";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
-import { toast } from "sonner";
-import { createActor } from "../backend";
-import type { Episode, EpisodeInput } from "../backend.d";
-
-// Form data uses number/string for UI convenience; we convert to backend types in mutationFn
-export interface EpisodeFormData {
-  animeId: string;
-  episodeNumber: number;
-  title: string;
-  description: string;
-  videoUrl: string;
-  duration: string; // e.g. "24:00"
-  thumbnailUrl: string;
-  seasonId?: string;
-}
-
-function toEpisodeInput(data: EpisodeFormData): EpisodeInput {
+import { v as useActor, x as useQueryClient, r as reactExports, w as useQuery, y as useMutation, a4 as useInternetIdentity, a5 as loadConfig, a6 as HttpAgent, a7 as StorageClient, h as ue, z as createActor } from "./index-EgDyTYGb.js";
+function toEpisodeInput(data) {
   return {
     animeId: data.animeId,
     episodeNumber: BigInt(Math.max(1, Math.floor(data.episodeNumber))),
@@ -31,133 +7,81 @@ function toEpisodeInput(data: EpisodeFormData): EpisodeInput {
     description: data.description.trim(),
     videoUrl: data.videoUrl.trim(),
     // Pass undefined for optional fields when empty so bindgen sends candid_none()
-    duration: data.duration.trim() || undefined,
-    thumbnailUrl: data.thumbnailUrl.trim() || undefined,
-    seasonId: data.seasonId || undefined,
+    duration: data.duration.trim() || void 0,
+    thumbnailUrl: data.thumbnailUrl.trim() || void 0,
+    seasonId: data.seasonId || void 0
   };
 }
-
-export function extractEpisodeError(error: unknown): string {
+function extractEpisodeError(error) {
   if (error instanceof Error) {
     const msg = error.message;
     const msgLower = msg.toLowerCase();
-
-    // "Backend is still loading" — friendly message
     if (msgLower.includes("backend is still loading")) {
       return "Backend is still connecting — please wait a moment and try again.";
     }
-
-    // IC0508 — canister stopped / not running
-    if (
-      msg.includes("IC0508") ||
-      msgLower.includes("canister is stopped") ||
-      msgLower.includes("canister stopped") ||
-      msgLower.includes("ic0_call_rejected") ||
-      msgLower.includes("canister_not_running") ||
-      msgLower.includes("stopped")
-    ) {
+    if (msg.includes("IC0508") || msgLower.includes("canister is stopped") || msgLower.includes("canister stopped") || msgLower.includes("ic0_call_rejected") || msgLower.includes("canister_not_running") || msgLower.includes("stopped")) {
       return "Server is temporarily unavailable. Please try again in a few minutes.";
     }
-
-    // IC0503 — canister out of cycles
     if (msg.includes("IC0503") || msgLower.includes("out of cycles")) {
       return "Server is out of resources. Please contact support.";
     }
-
-    // Network / fetch errors
-    if (
-      msgLower.includes("failed to fetch") ||
-      msgLower.includes("networkerror") ||
-      msgLower.includes("network error") ||
-      msgLower.includes("connection refused") ||
-      msgLower.includes("net::err")
-    ) {
+    if (msgLower.includes("failed to fetch") || msgLower.includes("networkerror") || msgLower.includes("network error") || msgLower.includes("connection refused") || msgLower.includes("net::err")) {
       return "Connection failed. Please check your internet and try again.";
     }
-
-    // Surface Motoko/IC reject messages
     if (msg.includes("reject")) {
       const match = msg.match(/reject_message:\s*(.+)/);
       if (match) return match[1].trim();
     }
-
-    // Unauthorized
     if (msgLower.includes("unauthorized")) {
       return "Unauthorized — admin credentials not accepted by backend.";
     }
-
     return msg;
   }
   return String(error);
 }
-
-// ── Video upload via object-storage ─────────────────────────────────────────
-
-export interface UploadProgress {
-  status: "idle" | "uploading" | "done" | "error";
-  percentage: number;
-  error?: string;
-}
-
-export function useUploadVideo() {
-  const [progress, setProgress] = useState<UploadProgress>({
+function useUploadVideo() {
+  const [progress, setProgress] = reactExports.useState({
     status: "idle",
-    percentage: 0,
+    percentage: 0
   });
-
-  // Get current identity so the HttpAgent can authenticate the canister certificate call
   const { identity } = useInternetIdentity();
-
-  const upload = async (file: File): Promise<string> => {
+  const upload = async (file) => {
+    var _a;
     setProgress({ status: "uploading", percentage: 0 });
-
     try {
       const config = await loadConfig();
-
-      // Pass identity to the agent so _immutableObjectStorageCreateCertificate
-      // canister call is properly signed — anonymous agents get 403 from gateway
-      const agentOptions: Record<string, unknown> = {
-        host: config.backend_host ?? "https://icp0.io",
+      const agentOptions = {
+        host: config.backend_host ?? "https://icp0.io"
       };
       if (identity) {
         agentOptions.identity = identity;
       }
-
       const agent = new HttpAgent(agentOptions);
-
-      if (config.backend_host?.includes("localhost")) {
-        await agent.fetchRootKey().catch(() => {});
+      if ((_a = config.backend_host) == null ? void 0 : _a.includes("localhost")) {
+        await agent.fetchRootKey().catch(() => {
+        });
       }
-
       const storageClient = new StorageClient(
         config.bucket_name,
         config.storage_gateway_url,
         config.backend_canister_id,
         config.project_id,
-        agent,
+        agent
       );
-
       const bytes = new Uint8Array(await file.arrayBuffer());
-
       const { hash } = await storageClient.putFile(bytes, (pct) => {
         setProgress({ status: "uploading", percentage: pct });
       });
-
       const url = await storageClient.getDirectURL(hash);
-
-      // Guard: never return a blob: URL or empty URL — they won't persist across sessions
       if (!url || url.startsWith("blob:")) {
-        const errMsg = url.startsWith("blob:")
-          ? "Upload returned a temporary URL that will not persist. Please try again."
-          : "Upload failed: could not generate permanent URL. Please try again.";
+        const errMsg = url.startsWith("blob:") ? "Upload returned a temporary URL that will not persist. Please try again." : "Upload failed: could not generate permanent URL. Please try again.";
         setProgress({ status: "error", percentage: 0, error: errMsg });
         console.error(
           "useUploadVideo: invalid URL returned from storage —",
-          url,
+          url
         );
         throw new Error(errMsg);
       }
-
       console.log("useUploadVideo: upload complete, persistent URL:", url);
       setProgress({ status: "done", percentage: 100 });
       return url;
@@ -167,88 +91,66 @@ export function useUploadVideo() {
       throw err;
     }
   };
-
   const reset = () => setProgress({ status: "idle", percentage: 0 });
-
   return { upload, progress, reset };
 }
-
-export function useEpisodesByAnime(animeId: string | undefined) {
+function useEpisodesByAnime(animeId) {
   const { actor, isFetching } = useActor(createActor);
   const queryClient = useQueryClient();
-
-  // When actor transitions from undefined → ready, invalidate so the query
-  // re-runs immediately even if it previously returned [] due to actor being null.
-  useEffect(() => {
+  reactExports.useEffect(() => {
     if (actor && animeId) {
       queryClient.invalidateQueries({ queryKey: ["episodes", animeId] });
     }
   }, [actor, animeId, queryClient]);
-
-  return useQuery<Episode[]>({
+  return useQuery({
     queryKey: ["episodes", animeId],
     queryFn: async () => {
       if (!animeId) return [];
       if (!actor) {
-        // Actor not ready — throw so React Query retries via retry config
         throw new Error("Actor not ready");
       }
       const result = await actor.getEpisodesByAnime(animeId);
-      return [...result].sort((a, b) =>
-        a.episodeNumber < b.episodeNumber
-          ? -1
-          : a.episodeNumber > b.episodeNumber
-            ? 1
-            : 0,
+      return [...result].sort(
+        (a, b) => a.episodeNumber < b.episodeNumber ? -1 : a.episodeNumber > b.episodeNumber ? 1 : 0
       );
     },
     enabled: !!animeId && !isFetching,
     retry: 3,
-    retryDelay: 2000,
+    retryDelay: 2e3
   });
 }
-
-export function useEpisode(
-  animeId: string | undefined,
-  episodeId: string | undefined,
-) {
+function useEpisode(animeId, episodeId) {
   const { actor, isFetching } = useActor(createActor);
   const queryClient = useQueryClient();
-
-  // When actor transitions from undefined → ready, invalidate so the query
-  // re-runs immediately even if it previously returned null.
-  useEffect(() => {
+  reactExports.useEffect(() => {
     if (actor && animeId && episodeId) {
       queryClient.invalidateQueries({
-        queryKey: ["episode", animeId, episodeId],
+        queryKey: ["episode", animeId, episodeId]
       });
     }
   }, [actor, animeId, episodeId, queryClient]);
-
-  return useQuery<Episode | null>({
+  return useQuery({
     queryKey: ["episode", animeId, episodeId],
     queryFn: async () => {
       if (!episodeId) return null;
       if (!actor) {
-        // Actor not ready — throw so React Query retries via retry config
         throw new Error("Actor not ready");
       }
       return actor.getEpisode(episodeId);
     },
     enabled: !!animeId && !!episodeId && !isFetching,
     retry: 3,
-    retryDelay: 2000,
+    retryDelay: 2e3
   });
 }
-
-export function useCreateEpisode() {
+function useCreateEpisode() {
   const { actor, isFetching } = useActor(createActor);
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (data: EpisodeFormData): Promise<Episode> => {
+    mutationFn: async (data) => {
       if (!actor || isFetching)
         throw new Error(
-          "Backend is still loading — please wait a moment and try again",
+          "Backend is still loading — please wait a moment and try again"
         );
       const input = toEpisodeInput(data);
       return actor.createEpisode("adminfaheem123", input);
@@ -256,29 +158,26 @@ export function useCreateEpisode() {
     onSuccess: (ep) => {
       queryClient.invalidateQueries({ queryKey: ["episodes", ep.animeId] });
       queryClient.invalidateQueries({ queryKey: ["episodes"] });
-      // Force immediate re-fetch so live page reflects new episode
       queryClient.refetchQueries({ queryKey: ["episodes"] });
-    },
+    }
     // onError intentionally omitted — caller handles display via extractEpisodeError
   });
 }
-
-export function useUpdateEpisode() {
+function useUpdateEpisode() {
   const { actor, isFetching } = useActor(createActor);
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async ({
       id,
-      data,
-    }: { id: string; data: Partial<EpisodeFormData> }): Promise<Episode> => {
+      data
+    }) => {
       if (!actor || isFetching)
         throw new Error(
-          "Backend is still loading — please wait a moment and try again",
+          "Backend is still loading — please wait a moment and try again"
         );
-      // Fetch current episode to merge partial updates
       const current = await actor.getEpisode(id);
       if (!current) throw new Error("Episode not found");
-      const merged: EpisodeFormData = {
+      const merged = {
         animeId: data.animeId ?? current.animeId,
         episodeNumber: data.episodeNumber ?? Number(current.episodeNumber),
         title: data.title ?? current.title,
@@ -286,46 +185,40 @@ export function useUpdateEpisode() {
         videoUrl: data.videoUrl ?? current.videoUrl,
         duration: data.duration ?? current.duration ?? "",
         thumbnailUrl: data.thumbnailUrl ?? current.thumbnailUrl ?? "",
-        seasonId:
-          data.seasonId !== undefined
-            ? data.seasonId
-            : (current.seasonId ?? undefined),
+        seasonId: data.seasonId !== void 0 ? data.seasonId : current.seasonId ?? void 0
       };
       const result = await actor.updateEpisode(
         "adminfaheem123",
         id,
-        toEpisodeInput(merged),
+        toEpisodeInput(merged)
       );
       if (!result)
         throw new Error(
-          "Episode update failed — episode may have been deleted",
+          "Episode update failed — episode may have been deleted"
         );
       return result;
     },
     onSuccess: (ep) => {
       queryClient.invalidateQueries({ queryKey: ["episodes", ep.animeId] });
       queryClient.invalidateQueries({
-        queryKey: ["episode", ep.animeId, ep.id],
+        queryKey: ["episode", ep.animeId, ep.id]
       });
-      // Force immediate re-fetch so live page reflects updated episode
       queryClient.refetchQueries({ queryKey: ["episodes"] });
-    },
+    }
     // onError intentionally omitted — caller handles display via extractEpisodeError
   });
 }
-
-export function useDeleteEpisode() {
+function useDeleteEpisode() {
   const { actor, isFetching } = useActor(createActor);
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (id: string): Promise<string> => {
+    mutationFn: async (id) => {
       if (!actor || isFetching)
         throw new Error(
-          "Backend is still loading — please wait a moment and try again",
+          "Backend is still loading — please wait a moment and try again"
         );
-      // Fetch episode first to get animeId for invalidation
       const ep = await actor.getEpisode(id);
-      const animeId = ep?.animeId ?? "";
+      const animeId = (ep == null ? void 0 : ep.animeId) ?? "";
       const success = await actor.deleteEpisode("adminfaheem123", id);
       if (!success) throw new Error("Delete failed — episode may not exist");
       return animeId;
@@ -333,12 +226,20 @@ export function useDeleteEpisode() {
     onSuccess: (animeId) => {
       queryClient.invalidateQueries({ queryKey: ["episodes", animeId] });
       queryClient.invalidateQueries({ queryKey: ["episodes"] });
-      // Force immediate re-fetch so live page reflects deletion
       queryClient.refetchQueries({ queryKey: ["episodes"] });
     },
-    onError: (error: unknown) => {
+    onError: (error) => {
       const msg = extractEpisodeError(error);
-      toast.error(`Failed to delete episode: ${msg}`);
-    },
+      ue.error(`Failed to delete episode: ${msg}`);
+    }
   });
 }
+export {
+  useEpisode as a,
+  useCreateEpisode as b,
+  useUpdateEpisode as c,
+  useDeleteEpisode as d,
+  extractEpisodeError as e,
+  useUploadVideo as f,
+  useEpisodesByAnime as u
+};

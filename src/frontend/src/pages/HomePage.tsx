@@ -33,7 +33,11 @@ export default function HomePage() {
   const { data: popular = [], isLoading: popularLoading } = usePopularAnime();
   const { data: filtered = [], isLoading: filteredLoading } =
     useAnimeByGenre(activeGenre);
-  const { data: allAnime = [] } = useAllAnime();
+  const {
+    data: allAnime = [],
+    isLoading: allAnimeLoading,
+    error: allAnimeError,
+  } = useAllAnime();
   const { data: bannerAds = [] } = useAdsByPlacement("homepage_banner");
 
   const { isLoggedIn, principalId } = useAuth();
@@ -71,6 +75,13 @@ export default function HomePage() {
   };
 
   const activeBannerAd = bannerAds[0] ?? null;
+
+  // Show global loading state while anime data is fetching for the first time
+  const isContentLoading = allAnimeLoading && allAnime.length === 0;
+
+  // Show error banner when backend fails and no cached data is available
+  const showErrorBanner =
+    !isContentLoading && allAnimeError !== null && allAnime.length === 0;
 
   return (
     <div className="pb-16" data-ocid="homepage">
@@ -121,6 +132,43 @@ export default function HomePage() {
         </div>
       </div>
 
+      {/* Backend error banner — shown only when fetch failed with no cached data */}
+      {showErrorBanner && (
+        <div
+          className="mx-4 sm:mx-6 lg:mx-8 mt-8 max-w-7xl xl:mx-auto rounded-lg border border-[#E50914]/40 bg-[#E50914]/10 px-5 py-4 flex items-center gap-3"
+          data-ocid="anime-load-error"
+          role="alert"
+        >
+          <svg
+            className="w-5 h-5 shrink-0 text-[#E50914]"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            aria-hidden="true"
+          >
+            <circle cx="12" cy="12" r="10" />
+            <line x1="12" y1="8" x2="12" y2="12" />
+            <line x1="12" y1="16" x2="12.01" y2="16" />
+          </svg>
+          <p className="text-sm text-foreground">
+            <span className="font-semibold text-[#E50914]">
+              Unable to load content —{" "}
+            </span>
+            please refresh the page. If the problem persists, the server may be
+            temporarily unavailable.
+          </p>
+          <button
+            type="button"
+            onClick={() => window.location.reload()}
+            className="ml-auto shrink-0 text-xs font-semibold text-[#E50914] hover:text-[#E50914]/80 transition-colors duration-200"
+            data-ocid="anime-load-error-refresh"
+          >
+            Refresh
+          </button>
+        </div>
+      )}
+
       {/* Content sections */}
       <div className="mt-8 space-y-10">
         {activeGenre ? (
@@ -138,60 +186,71 @@ export default function HomePage() {
           )
         ) : (
           <>
-            {/* Latest Anime */}
-            {latestLoading ? (
-              <CarouselSkeleton title="Latest Anime" />
+            {/* Loading skeletons while initial data is fetching */}
+            {isContentLoading ? (
+              <>
+                <CarouselSkeleton title="Latest Anime" />
+                <CarouselSkeleton title="Trending Now" />
+                <CarouselSkeleton title="Popular Series" />
+              </>
             ) : (
-              <CarouselSection
-                title="Latest Anime"
-                anime={latest}
-                loading={false}
-                onWatchlistToggle={handleWatchlistToggle}
-                watchlistIds={watchlistIds}
-              />
-            )}
-
-            {/* Trending Now */}
-            {trendingLoading ? (
-              <CarouselSkeleton title="Trending Now" />
-            ) : (
-              <CarouselSection
-                title="Trending Now"
-                anime={trending}
-                loading={false}
-                onWatchlistToggle={handleWatchlistToggle}
-                watchlistIds={watchlistIds}
-              />
-            )}
-
-            {/* Popular Series */}
-            {popularLoading ? (
-              <CarouselSkeleton title="Popular Series" />
-            ) : (
-              <CarouselSection
-                title="Popular Series"
-                anime={popular}
-                loading={false}
-                onWatchlistToggle={handleWatchlistToggle}
-                watchlistIds={watchlistIds}
-              />
-            )}
-
-            {/* Your Watchlist — only for logged-in users */}
-            {isLoggedIn && (
-              <section className="space-y-4" data-ocid="watchlist-section">
-                {watchlistAnime.length > 0 ? (
+              <>
+                {/* Latest Anime */}
+                {latestLoading ? (
+                  <CarouselSkeleton title="Latest Anime" />
+                ) : (
                   <CarouselSection
-                    title="Your Watchlist"
-                    anime={watchlistAnime}
+                    title="Latest Anime"
+                    anime={latest}
                     loading={false}
                     onWatchlistToggle={handleWatchlistToggle}
                     watchlistIds={watchlistIds}
                   />
-                ) : (
-                  <WatchlistEmptyState />
                 )}
-              </section>
+
+                {/* Trending Now */}
+                {trendingLoading ? (
+                  <CarouselSkeleton title="Trending Now" />
+                ) : (
+                  <CarouselSection
+                    title="Trending Now"
+                    anime={trending}
+                    loading={false}
+                    onWatchlistToggle={handleWatchlistToggle}
+                    watchlistIds={watchlistIds}
+                  />
+                )}
+
+                {/* Popular Series */}
+                {popularLoading ? (
+                  <CarouselSkeleton title="Popular Series" />
+                ) : (
+                  <CarouselSection
+                    title="Popular Series"
+                    anime={popular}
+                    loading={false}
+                    onWatchlistToggle={handleWatchlistToggle}
+                    watchlistIds={watchlistIds}
+                  />
+                )}
+
+                {/* Your Watchlist — only for logged-in users */}
+                {isLoggedIn && (
+                  <section className="space-y-4" data-ocid="watchlist-section">
+                    {watchlistAnime.length > 0 ? (
+                      <CarouselSection
+                        title="Your Watchlist"
+                        anime={watchlistAnime}
+                        loading={false}
+                        onWatchlistToggle={handleWatchlistToggle}
+                        watchlistIds={watchlistIds}
+                      />
+                    ) : (
+                      <WatchlistEmptyState />
+                    )}
+                  </section>
+                )}
+              </>
             )}
           </>
         )}
