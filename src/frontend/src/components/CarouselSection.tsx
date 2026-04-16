@@ -1,6 +1,6 @@
 import { Button } from "@/components/ui/button";
 import { ChevronLeft, ChevronRight } from "lucide-react";
-import { useRef } from "react";
+import { useRef, useState } from "react";
 import type { Anime } from "../types";
 import AnimeCard from "./AnimeCard";
 
@@ -20,6 +20,8 @@ export default function CarouselSection({
   loading,
 }: CarouselSectionProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
+  const [atStart, setAtStart] = useState(true);
+  const [atEnd, setAtEnd] = useState(false);
 
   const scroll = (dir: "left" | "right") => {
     if (!scrollRef.current) return;
@@ -30,11 +32,18 @@ export default function CarouselSection({
     });
   };
 
+  const handleScroll = () => {
+    if (!scrollRef.current) return;
+    const { scrollLeft, scrollWidth, clientWidth } = scrollRef.current;
+    setAtStart(scrollLeft <= 4);
+    setAtEnd(scrollLeft + clientWidth >= scrollWidth - 4);
+  };
+
+  const ocidKey = title.toLowerCase().replace(/\s+/g, "-");
+
   return (
-    <section
-      className="space-y-4"
-      data-ocid={`carousel-${title.toLowerCase().replace(/\s+/g, "-")}`}
-    >
+    <section className="space-y-3" data-ocid={`carousel-${ocidKey}`}>
+      {/* Header */}
       <div className="flex items-center justify-between px-4 sm:px-6 lg:px-8">
         <h2 className="font-display font-bold text-xl text-foreground">
           {title}
@@ -43,8 +52,9 @@ export default function CarouselSection({
           <Button
             variant="outline"
             size="sm"
-            className="w-8 h-8 p-0 border-border bg-card hover:bg-secondary hover:text-foreground"
+            className="w-8 h-8 p-0 border-border bg-card hover:bg-secondary hover:text-foreground disabled:opacity-30"
             onClick={() => scroll("left")}
+            disabled={atStart}
             aria-label="Scroll left"
             data-ocid="carousel-prev"
           >
@@ -53,8 +63,9 @@ export default function CarouselSection({
           <Button
             variant="outline"
             size="sm"
-            className="w-8 h-8 p-0 border-border bg-card hover:bg-secondary hover:text-foreground"
+            className="w-8 h-8 p-0 border-border bg-card hover:bg-secondary hover:text-foreground disabled:opacity-30"
             onClick={() => scroll("right")}
+            disabled={atEnd && !loading}
             aria-label="Scroll right"
             data-ocid="carousel-next"
           >
@@ -63,9 +74,11 @@ export default function CarouselSection({
         </div>
       </div>
 
+      {/* Scroll row */}
       <div
         ref={scrollRef}
-        className="flex gap-3 overflow-x-auto pb-2 px-4 sm:px-6 lg:px-8 scrollbar-hide scroll-smooth"
+        onScroll={handleScroll}
+        className="flex gap-3 overflow-x-auto pb-3 px-4 sm:px-6 lg:px-8"
         style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
       >
         {loading

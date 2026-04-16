@@ -2,6 +2,7 @@ import SeasonTypes "../types/season";
 import EpisodeTypes "../types/episode";
 import Common "../types/common";
 import SeasonLib "../lib/season";
+import EpisodeLib "../lib/episode";
 
 mixin (
   seasons : [SeasonTypes.Season],
@@ -17,12 +18,13 @@ mixin (
     SeasonLib.getByAnime(seasons, animeId);
   };
 
+  /// Returns episodes for the given season sorted by episodeNumber ascending.
   public query func getEpisodesBySeason(seasonId : Common.SeasonId) : async [EpisodeTypes.Episode] {
-    episodes.filter(func(e : EpisodeTypes.Episode) : Bool {
-      switch (e.seasonId) {
-        case (?sid) sid == seasonId;
-        case null false;
-      };
-    });
+    EpisodeLib.getBySeason(episodes, seasonId);
+  };
+
+  /// Returns ALL episodes — intended for admin panel listing.
+  public query func getAllEpisodes() : async [EpisodeTypes.Episode] {
+    EpisodeLib.getAll(episodes);
   };
 };

@@ -1,17 +1,21 @@
 import { Button } from "@/components/ui/button";
-import { Link, useNavigate } from "@tanstack/react-router";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Link, useNavigate, useSearch } from "@tanstack/react-router";
 import {
   AlertCircle,
   ArrowLeft,
   Bookmark,
+  Eye,
+  EyeOff,
   Loader2,
   LogIn,
-  Shield,
   Tv2,
+  UserPlus,
   Zap,
 } from "lucide-react";
 import { motion } from "motion/react";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useAuth } from "../hooks/useAuth";
 
 const BENEFITS = [
@@ -23,40 +27,82 @@ const BENEFITS = [
   },
   {
     icon: Zap,
-    title: "Personalized Experience",
-    description:
-      "Get recommendations tailored to your taste and watch history.",
+    title: "Episode Ratings & Comments",
+    description: "Rate episodes and join the discussion with other fans.",
   },
   {
-    icon: Shield,
-    title: "Secure & Passwordless",
-    description: "Blockchain-backed identity — no passwords, no data breaches.",
+    icon: Tv2,
+    title: "Anime Requests",
+    description: "Request your favourite anime and track when it gets added.",
   },
 ];
 
+type TabType = "login" | "signup";
+
 export default function LoginPage() {
-  const { login, isLoggingIn, isLoggedIn, isInitializing, loginStatus } =
+  const { isLoggedIn, login, signup, isLoggingIn, error, clearError } =
     useAuth();
   const navigate = useNavigate();
+  // Read ?mode=signup from URL search params
+  const search = useSearch({ strict: false }) as { mode?: string };
+  const [tab, setTab] = useState<TabType>(
+    search.mode === "signup" ? "signup" : "login",
+  );
+
+  // Form fields
+  const [username, setUsername] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [localError, setLocalError] = useState<string | null>(null);
 
   // Redirect if already logged in
   useEffect(() => {
-    if (!isInitializing && isLoggedIn) {
-      navigate({ to: "/" });
+    if (isLoggedIn) {
+      void navigate({ to: "/" });
     }
-  }, [isLoggedIn, isInitializing, navigate]);
+  }, [isLoggedIn, navigate]);
 
-  const hasError = loginStatus === "loginError";
+  const switchTab = (t: TabType) => {
+    setTab(t);
+    setLocalError(null);
+    clearError();
+    setUsername("");
+    setEmail("");
+    setPassword("");
+    setConfirmPassword("");
+  };
 
-  if (isInitializing) {
-    return (
-      <div className="min-h-[80vh] flex items-center justify-center">
-        <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-      </div>
-    );
-  }
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLocalError(null);
+    if (!username.trim() || !password) {
+      setLocalError("Please fill in all fields.");
+      return;
+    }
+    const ok = await login(username.trim(), password);
+    if (ok) void navigate({ to: "/" });
+  };
 
-  if (isLoggedIn) return null; // redirect in effect
+  const handleSignup = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLocalError(null);
+    if (!username.trim() || !password) {
+      setLocalError("Please fill in all fields.");
+      return;
+    }
+    if (password !== confirmPassword) {
+      setLocalError("Passwords do not match.");
+      return;
+    }
+    const ok = await signup(username.trim(), password);
+    if (ok) void navigate({ to: "/" });
+  };
+
+  const displayError = localError ?? error;
+
+  if (isLoggedIn) return null;
 
   return (
     <div
@@ -88,11 +134,11 @@ export default function LoginPage() {
 
           <div className="space-y-2">
             <h2 className="font-display font-bold text-2xl text-foreground">
-              Sign in to unlock everything
+              Join thousands of anime fans
             </h2>
             <p className="text-muted-foreground leading-relaxed max-w-sm mx-auto lg:mx-0">
-              Join thousands of anime fans. Track what you watch, discover new
-              series, and never lose your place again.
+              Track what you watch, rate episodes, leave comments, and never
+              lose your place again.
             </p>
           </div>
 
@@ -107,7 +153,7 @@ export default function LoginPage() {
                 className="flex items-start gap-3 text-left"
               >
                 <div className="w-9 h-9 bg-primary/10 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5">
-                  <Icon className="w-4.5 h-4.5 text-primary" />
+                  <Icon className="w-4 h-4 text-primary" />
                 </div>
                 <div>
                   <p className="font-semibold text-foreground text-sm">
@@ -122,65 +168,277 @@ export default function LoginPage() {
           </div>
         </motion.div>
 
-        {/* Right: Login card */}
+        {/* Right: Auth card */}
         <motion.div
           initial={{ opacity: 0, y: 24 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5, delay: 0.15 }}
-          className="w-full lg:w-[380px] flex-shrink-0"
+          className="w-full lg:w-[400px] flex-shrink-0"
         >
-          <div className="bg-card border border-border rounded-2xl p-8 space-y-7 shadow-xl">
-            {/* Card header */}
-            <div className="space-y-1 text-center">
-              <h2 className="font-display font-bold text-xl text-foreground">
-                Welcome Back
-              </h2>
-              <p className="text-muted-foreground text-sm">
-                Sign in with Internet Identity — secure and passwordless.
-              </p>
+          <div className="bg-card border border-border rounded-2xl shadow-xl overflow-hidden">
+            {/* Tab switcher */}
+            <div className="grid grid-cols-2 border-b border-border">
+              <button
+                type="button"
+                onClick={() => switchTab("login")}
+                data-ocid="tab-login"
+                className={[
+                  "flex items-center justify-center gap-2 py-4 text-sm font-semibold transition-colors",
+                  tab === "login"
+                    ? "text-primary border-b-2 border-primary bg-primary/5"
+                    : "text-muted-foreground hover:text-foreground",
+                ].join(" ")}
+              >
+                <LogIn className="w-4 h-4" />
+                Login
+              </button>
+              <button
+                type="button"
+                onClick={() => switchTab("signup")}
+                data-ocid="tab-signup"
+                className={[
+                  "flex items-center justify-center gap-2 py-4 text-sm font-semibold transition-colors",
+                  tab === "signup"
+                    ? "text-primary border-b-2 border-primary bg-primary/5"
+                    : "text-muted-foreground hover:text-foreground",
+                ].join(" ")}
+              >
+                <UserPlus className="w-4 h-4" />
+                Sign Up
+              </button>
             </div>
 
-            {/* Divider */}
-            <div className="h-px bg-border" />
-
-            {/* Error state */}
-            {hasError && (
-              <div className="flex items-start gap-2.5 bg-destructive/10 border border-destructive/30 rounded-lg px-4 py-3">
-                <AlertCircle className="w-4 h-4 text-destructive flex-shrink-0 mt-0.5" />
-                <p className="text-destructive text-sm leading-snug">
-                  Sign-in failed. Please try again or check your Internet
-                  Identity setup.
-                </p>
-              </div>
-            )}
-
-            {/* Primary CTA */}
-            <Button
-              onClick={login}
-              disabled={isLoggingIn}
-              size="lg"
-              className="w-full bg-primary hover:bg-primary/90 text-white gap-2 font-semibold h-12 text-base"
-              data-ocid="login-btn"
-            >
-              {isLoggingIn ? (
-                <>
-                  <Loader2 className="w-5 h-5 animate-spin" />
-                  Signing in…
-                </>
-              ) : (
-                <>
-                  <LogIn className="w-5 h-5" />
-                  Sign in with Internet Identity
-                </>
+            <div className="p-7 space-y-5">
+              {/* Error message */}
+              {displayError && (
+                <motion.div
+                  initial={{ opacity: 0, y: -6 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="flex items-start gap-2.5 bg-destructive/10 border border-destructive/30 rounded-lg px-4 py-3"
+                  data-ocid="auth-error"
+                >
+                  <AlertCircle className="w-4 h-4 text-destructive flex-shrink-0 mt-0.5" />
+                  <p className="text-destructive text-sm leading-snug">
+                    {displayError}
+                  </p>
+                </motion.div>
               )}
-            </Button>
 
-            {/* Trust note */}
-            <p className="text-xs text-muted-foreground text-center leading-relaxed">
-              Internet Identity is a blockchain-based authentication system by
-              the Internet Computer. No passwords. No tracking. You own your
-              identity.
-            </p>
+              {tab === "login" ? (
+                <form onSubmit={handleLogin} className="space-y-4">
+                  <div className="space-y-1.5">
+                    <Label
+                      htmlFor="login-username"
+                      className="text-sm font-medium text-foreground"
+                    >
+                      Username
+                    </Label>
+                    <Input
+                      id="login-username"
+                      type="text"
+                      placeholder="Your username"
+                      value={username}
+                      onChange={(e) => setUsername(e.target.value)}
+                      autoComplete="username"
+                      disabled={isLoggingIn}
+                      className="bg-background border-input focus:border-primary/50"
+                      data-ocid="login-username-input"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label
+                      htmlFor="login-password"
+                      className="text-sm font-medium text-foreground"
+                    >
+                      Password
+                    </Label>
+                    <div className="relative">
+                      <Input
+                        id="login-password"
+                        type={showPassword ? "text" : "password"}
+                        placeholder="Your password"
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        autoComplete="current-password"
+                        disabled={isLoggingIn}
+                        className="bg-background border-input focus:border-primary/50 pr-10"
+                        data-ocid="login-password-input"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowPassword((v) => !v)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                        aria-label={
+                          showPassword ? "Hide password" : "Show password"
+                        }
+                      >
+                        {showPassword ? (
+                          <EyeOff className="w-4 h-4" />
+                        ) : (
+                          <Eye className="w-4 h-4" />
+                        )}
+                      </button>
+                    </div>
+                  </div>
+                  <Button
+                    type="submit"
+                    disabled={isLoggingIn}
+                    size="lg"
+                    className="w-full bg-primary hover:bg-primary/90 text-white gap-2 font-semibold h-11"
+                    data-ocid="login-submit-btn"
+                  >
+                    {isLoggingIn ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        Signing in…
+                      </>
+                    ) : (
+                      <>
+                        <LogIn className="w-4 h-4" />
+                        Sign In
+                      </>
+                    )}
+                  </Button>
+                  <p className="text-xs text-muted-foreground text-center">
+                    No account yet?{" "}
+                    <button
+                      type="button"
+                      onClick={() => switchTab("signup")}
+                      className="text-primary hover:underline font-semibold"
+                    >
+                      Sign up free
+                    </button>
+                  </p>
+                </form>
+              ) : (
+                <form onSubmit={handleSignup} className="space-y-4">
+                  <div className="space-y-1.5">
+                    <Label
+                      htmlFor="signup-username"
+                      className="text-sm font-medium text-foreground"
+                    >
+                      Username
+                    </Label>
+                    <Input
+                      id="signup-username"
+                      type="text"
+                      placeholder="Choose a username"
+                      value={username}
+                      onChange={(e) => setUsername(e.target.value)}
+                      autoComplete="username"
+                      disabled={isLoggingIn}
+                      className="bg-background border-input focus:border-primary/50"
+                      data-ocid="signup-username-input"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label
+                      htmlFor="signup-email"
+                      className="text-sm font-medium text-foreground"
+                    >
+                      Email{" "}
+                      <span className="text-muted-foreground text-xs">
+                        (optional)
+                      </span>
+                    </Label>
+                    <Input
+                      id="signup-email"
+                      type="email"
+                      placeholder="your@email.com"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      autoComplete="email"
+                      disabled={isLoggingIn}
+                      className="bg-background border-input focus:border-primary/50"
+                      data-ocid="signup-email-input"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label
+                      htmlFor="signup-password"
+                      className="text-sm font-medium text-foreground"
+                    >
+                      Password
+                    </Label>
+                    <div className="relative">
+                      <Input
+                        id="signup-password"
+                        type={showPassword ? "text" : "password"}
+                        placeholder="At least 6 characters"
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        autoComplete="new-password"
+                        disabled={isLoggingIn}
+                        className="bg-background border-input focus:border-primary/50 pr-10"
+                        data-ocid="signup-password-input"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowPassword((v) => !v)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                        aria-label={
+                          showPassword ? "Hide password" : "Show password"
+                        }
+                      >
+                        {showPassword ? (
+                          <EyeOff className="w-4 h-4" />
+                        ) : (
+                          <Eye className="w-4 h-4" />
+                        )}
+                      </button>
+                    </div>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label
+                      htmlFor="signup-confirm"
+                      className="text-sm font-medium text-foreground"
+                    >
+                      Confirm Password
+                    </Label>
+                    <Input
+                      id="signup-confirm"
+                      type={showPassword ? "text" : "password"}
+                      placeholder="Repeat password"
+                      value={confirmPassword}
+                      onChange={(e) => setConfirmPassword(e.target.value)}
+                      autoComplete="new-password"
+                      disabled={isLoggingIn}
+                      className="bg-background border-input focus:border-primary/50"
+                      data-ocid="signup-confirm-input"
+                    />
+                  </div>
+                  <Button
+                    type="submit"
+                    disabled={isLoggingIn}
+                    size="lg"
+                    className="w-full bg-primary hover:bg-primary/90 text-white gap-2 font-semibold h-11"
+                    data-ocid="signup-submit-btn"
+                  >
+                    {isLoggingIn ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        Creating account…
+                      </>
+                    ) : (
+                      <>
+                        <UserPlus className="w-4 h-4" />
+                        Create Account
+                      </>
+                    )}
+                  </Button>
+                  <p className="text-xs text-muted-foreground text-center">
+                    Already have an account?{" "}
+                    <button
+                      type="button"
+                      onClick={() => switchTab("login")}
+                      className="text-primary hover:underline font-semibold"
+                    >
+                      Sign in
+                    </button>
+                  </p>
+                </form>
+              )}
+            </div>
           </div>
 
           {/* Back to home */}

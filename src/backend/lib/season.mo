@@ -1,5 +1,4 @@
 import Nat "mo:core/Nat";
-import Array "mo:core/Array";
 import Order "mo:core/Order";
 import Types "../types/season";
 import Common "../types/common";
@@ -109,6 +108,55 @@ module {
     (deleted, updated);
   };
 
+  // ── Seed data ────────────────────────────────────────────────────────────────
+
+  /// Seed Season 1 and Season 2 for each of the 8 seeded anime (anime-0 … anime-7).
+  /// Returns (newSeasons, nextSeasonId).
+  /// Guard: if seasons already exist, returns unchanged.
+  public func seedSampleData(seasons : [Types.Season], nextId : Nat, createdAt : Common.Timestamp) : ([Types.Season], Nat) {
+    if (seasons.size() > 0) { return (seasons, nextId) };
+
+    // 8 anime × 2 seasons each = 16 seasons
+    // Season IDs: "season-0" … "season-15"
+    // Mapping: anime-N → season-(N*2) = S1, season-(N*2+1) = S2
+    var idCounter = nextId;
+    var result = seasons;
+    let animeCount = 8;
+
+    var animeIdx = 0;
+    while (animeIdx < animeCount) {
+      let animeId = "anime-" # animeIdx.toText();
+
+      // Season 1
+      let s1Id = "season-" # idCounter.toText();
+      let s1 : Types.Season = {
+        id = s1Id;
+        animeId;
+        seasonNumber = 1;
+        name = "Season 1";
+        createdAt;
+      };
+      result := result.concat([s1]);
+      idCounter += 1;
+
+      // Season 2
+      let s2Id = "season-" # idCounter.toText();
+      let s2 : Types.Season = {
+        id = s2Id;
+        animeId;
+        seasonNumber = 2;
+        name = "Season 2";
+        createdAt;
+      };
+      result := result.concat([s2]);
+      idCounter += 1;
+
+      animeIdx += 1;
+    };
+
+    (result, idCounter);
+  };
+
   // ── Data migration ───────────────────────────────────────────────────────────
 
   /// Fix any seasons where seasonNumber == 0. Groups by animeId and reassigns
@@ -135,11 +183,9 @@ module {
     });
 
     // Walk through; for each anime, track the next number to assign to zero-seasons
-    // We keep per-anime counters using a simple scan approach
     var result : [Types.Season] = [];
     for (s in sorted.values()) {
       if (s.seasonNumber == 0) {
-        // Count how many seasons for this anime are already in result (fixed or original >= 1)
         let alreadyCount = result.filter(func(r : Types.Season) : Bool { r.animeId == s.animeId }).size();
         let fixedNumber = alreadyCount + 1;
         let fixed : Types.Season = { s with seasonNumber = fixedNumber };

@@ -5,12 +5,15 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { Slider } from "@/components/ui/slider";
+import { useQuery } from "@tanstack/react-query";
 import { Link, useNavigate, useParams } from "@tanstack/react-router";
 import {
   AlertCircle,
   ArrowLeft,
   ChevronDown,
+  List,
   Loader2,
   Maximize,
   Minimize,
@@ -21,14 +24,48 @@ import {
   SkipForward,
   Volume2,
   VolumeX,
+  X,
 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { SeasonPublic } from "../backend.d";
 import { EpisodeComments } from "../components/EpisodeComments";
 import { useAdsByPlacement } from "../hooks/useAds";
 import { useAnimeDetail } from "../hooks/useAnime";
-import { useEpisode, useEpisodesByAnime } from "../hooks/useEpisodes";
 import { useSeasonsByAnime } from "../hooks/useSeasons";
+import { getEpisodesList } from "../lib/localStorageDB";
+import type { Episode, SeasonPublic } from "../lib/localStorageDB";
+
+// ── Episode hooks (shared store) ──────────────────────────────────────────────
+
+function useEpisodesByAnime(animeId: string | undefined) {
+  return useQuery<Episode[]>({
+    queryKey: ["episodes_by_anime", animeId],
+    queryFn: () => {
+      if (!animeId) return [];
+      return getEpisodesList()
+        .filter((e) => e.animeId === animeId)
+        .sort((a, b) => Number(a.episodeNumber) - Number(b.episodeNumber));
+    },
+    enabled: !!animeId,
+    staleTime: 0,
+  });
+}
+
+function useEpisode(
+  animeId: string | undefined,
+  episodeId: string | undefined,
+) {
+  return useQuery<Episode | null>({
+    queryKey: ["episode", animeId, episodeId],
+    queryFn: () => {
+      if (!episodeId) return null;
+      return getEpisodesList().find((e) => e.id === episodeId) ?? null;
+    },
+    enabled: !!animeId && !!episodeId,
+    staleTime: 0,
+  });
+}
+
+// ── Constants ─────────────────────────────────────────────────────────────────
 
 const QUALITY_OPTIONS = ["Auto", "1080p", "720p", "480p"] as const;
 type Quality = (typeof QUALITY_OPTIONS)[number];
@@ -91,18 +128,16 @@ function detectVideoType(url: string): VideoType {
   return "html5";
 }
 
-// ── Error code to human message ────────────────────────────────────────────
-
 function getVideoErrorMessage(code: number | undefined): string {
   switch (code) {
     case 4:
-      return "Video load nahi hua — format support nahi hota ya URL galat hai";
+      return "Video could not be loaded. Format not supported or URL is invalid.";
     case 2:
-      return "Network error — internet check karo ya dobara try karo";
+      return "Network error — check your internet connection and try again.";
     case 3:
-      return "Video file corrupt lag rahi hai — admin se contact karo";
+      return "Video file appears corrupt or damaged. Contact the admin.";
     default:
-      return "Video load nahi hua. URL check karo ya admin se contact karo.";
+      return "Video could not be loaded. Try a different episode or check back later.";
   }
 }
 
@@ -171,8 +206,6 @@ function PreRollAd({ videoUrl, onComplete }: PreRollAdProps) {
   );
 }
 
-// ── Video loading / error states ──────────────────────────────────────────
-
 function VideoLoadingOverlay() {
   return (
     <div className="absolute inset-0 flex items-center justify-center bg-black/60 z-10 pointer-events-none">
@@ -204,7 +237,7 @@ function VideoErrorOverlay({
       <AlertCircle className="w-12 h-12 text-destructive" />
       <div className="text-center space-y-1 px-6">
         <p className="text-foreground font-semibold text-base">
-          {isRetrying ? "Dobara try ho raha hai…" : "Video load nahi hua"}
+          {isRetrying ? "Retrying…" : "Video could not be loaded"}
         </p>
         <p className="text-muted-foreground text-sm max-w-xs">{message}</p>
       </div>
@@ -223,7 +256,7 @@ function VideoErrorOverlay({
   );
 }
 
-// ── YouTube iframe player ─────────────────────────────────────────────────
+// ── YouTube/Drive iframe player ───────────────────────────────────────────
 
 interface IframePlayerProps {
   src: string;
@@ -354,15 +387,182 @@ function SeasonSelector({
   );
 }
 
-// ── Main video player ──────────────────────────────────────────────────────
+// ── Episode Sidebar ──────────────────────────────────────────────────────
+
+interface EpisodeSidebarProps {
+  episodes: Episode[];
+  currentEpisodeId: string;
+  seasons: SeasonPublic[];
+  activeSeason: string | null;
+  onSeasonChange: (seasonId: string) => void;
+  onEpisodeClick: (ep: Episode) => void;
+  isOpen: boolean;
+  onClose: () => void;
+}
+
+function EpisodeSidebar({
+  episodes,
+  currentEpisodeId,
+  seasons,
+  activeSeason,
+  onSeasonChange,
+  onEpisodeClick,
+  isOpen,
+  onClose,
+}: EpisodeSidebarProps) {
+  const currentRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    if (isOpen && currentRef.current) {
+      currentRef.current.scrollIntoView({
+        block: "nearest",
+        behavior: "smooth",
+      });
+    }
+  }, [isOpen]);
+
+  return (
+    <>
+      {/* Mobile backdrop */}
+      {isOpen && (
+        <div
+          role="button"
+          tabIndex={-1}
+          className="fixed inset-0 bg-black/60 z-30 lg:hidden"
+          onClick={onClose}
+          onKeyDown={(e) => e.key === "Escape" && onClose()}
+          aria-label="Close episode list"
+        />
+      )}
+
+      {/* Sidebar panel */}
+      <div
+        data-ocid="episode-sidebar"
+        className={[
+          "flex flex-col bg-card border-l border-border/60",
+          // Desktop: always-visible right column, 280px wide
+          "lg:relative lg:translate-x-0 lg:w-72 lg:flex lg:z-auto",
+          // Mobile/tablet: slide-in drawer from right
+          "fixed right-0 top-0 h-full w-72 z-40 transition-transform duration-300",
+          isOpen ? "translate-x-0" : "translate-x-full lg:translate-x-0",
+        ].join(" ")}
+      >
+        {/* Sidebar header */}
+        <div className="flex items-center justify-between px-3 py-2.5 border-b border-border/60 shrink-0">
+          <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+            Episodes
+          </span>
+          {/* Close button — mobile only */}
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close episode list"
+            data-ocid="episode-sidebar-close"
+            className="lg:hidden p-1 rounded text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        {/* Season selector inside sidebar */}
+        {seasons.length > 1 && (
+          <div className="px-3 py-2 border-b border-border/40 shrink-0">
+            <select
+              value={activeSeason ?? ""}
+              onChange={(e) => onSeasonChange(e.target.value)}
+              className="w-full bg-background border border-border/60 text-foreground text-xs rounded-md h-8 px-2 focus:outline-none focus:border-primary"
+              aria-label="Select season"
+              data-ocid="sidebar-season-select"
+            >
+              {seasons.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.name}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+
+        {/* Episode list */}
+        <ScrollArea className="flex-1">
+          <div className="py-1">
+            {episodes.length === 0 ? (
+              <div
+                className="px-4 py-8 text-center text-muted-foreground text-xs"
+                data-ocid="episode-sidebar-empty"
+              >
+                No episodes in this season
+              </div>
+            ) : (
+              episodes.map((ep, idx) => {
+                const isCurrent = ep.id === currentEpisodeId;
+                return (
+                  <button
+                    key={ep.id}
+                    ref={isCurrent ? currentRef : undefined}
+                    type="button"
+                    onClick={() => onEpisodeClick(ep)}
+                    data-ocid={`episode-sidebar-item.${idx + 1}`}
+                    className={[
+                      "w-full flex items-start gap-2.5 px-3 py-2.5 text-left transition-colors border-l-2",
+                      isCurrent
+                        ? "bg-primary/10 border-primary text-foreground"
+                        : "border-transparent hover:bg-muted/40 hover:border-primary/40 text-muted-foreground hover:text-foreground",
+                    ].join(" ")}
+                    aria-current={isCurrent ? "true" : undefined}
+                  >
+                    {/* Thumbnail */}
+                    {ep.thumbnailUrl ? (
+                      <img
+                        src={ep.thumbnailUrl}
+                        alt=""
+                        aria-hidden
+                        className="w-14 h-9 object-cover rounded shrink-0 bg-muted"
+                      />
+                    ) : (
+                      <div className="w-14 h-9 rounded shrink-0 bg-muted flex items-center justify-center">
+                        {isCurrent ? (
+                          <Play className="w-3.5 h-3.5 text-primary fill-primary" />
+                        ) : (
+                          <Play className="w-3.5 h-3.5 text-muted-foreground/50" />
+                        )}
+                      </div>
+                    )}
+                    {/* Meta */}
+                    <div className="min-w-0 flex-1">
+                      <p
+                        className={[
+                          "text-[11px] font-mono leading-none mb-0.5",
+                          isCurrent
+                            ? "text-primary"
+                            : "text-muted-foreground/60",
+                        ].join(" ")}
+                      >
+                        Ep {Number(ep.episodeNumber)}
+                      </p>
+                      <p className="text-xs font-medium leading-tight line-clamp-2 break-words">
+                        {ep.title}
+                      </p>
+                    </div>
+                  </button>
+                );
+              })
+            )}
+          </div>
+        </ScrollArea>
+      </div>
+    </>
+  );
+}
+
+// ── Main WatchPage ─────────────────────────────────────────────────────────
 
 const MAX_AUTO_RETRIES = 1;
 
-// Read all possible params from the router (works for both route shapes)
-type AnyParams = any; // eslint-disable-line @typescript-eslint/no-explicit-any
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type AnyParams = any;
 
 export default function WatchPage() {
-  // Unconditionally read params from both possible routes
   const rawParams = useParams({ strict: false }) as AnyParams;
   const animeId: string = rawParams.animeId ?? "";
   const episodeId: string = rawParams.episodeId ?? "";
@@ -372,6 +572,7 @@ export default function WatchPage() {
     : null;
   const isLegacy = !seasonNumberParam;
   const navigate = useNavigate();
+
   const { data: anime } = useAnimeDetail(animeId);
   const { data: episode, isLoading: episodeLoading } = useEpisode(
     animeId,
@@ -381,16 +582,14 @@ export default function WatchPage() {
   const { data: seasons = [] } = useSeasonsByAnime(animeId);
   const { data: preRollAds = [] } = useAdsByPlacement("video_pre_roll");
 
-  // Season state
   const [activeSeason, setActiveSeason] = useState<string | null>(null);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
-  // Initialize activeSeason once seasons and episode are loaded
   useEffect(() => {
     if (activeSeason !== null) return;
     if (seasons.length === 0) return;
 
     if (seasonNumber) {
-      // URL has explicit season number
       const matched = seasons.find(
         (s) => Number(s.seasonNumber) === seasonNumber,
       );
@@ -403,12 +602,39 @@ export default function WatchPage() {
     if (episode?.seasonId) {
       setActiveSeason(episode.seasonId);
     } else {
-      // Default to first season
       setActiveSeason(seasons[0].id);
     }
   }, [seasons, episode, seasonNumber, activeSeason]);
 
-  // If on legacy route and we have season info, redirect to canonical URL
+  const handleSeasonChange = (newSeasonId: string) => {
+    if (newSeasonId === activeSeason) return;
+    setActiveSeason(newSeasonId);
+    const newSeasonEps = allEpisodes
+      .filter((ep) => ep.seasonId === newSeasonId)
+      .sort((a, b) =>
+        a.episodeNumber < b.episodeNumber
+          ? -1
+          : a.episodeNumber > b.episodeNumber
+            ? 1
+            : 0,
+      );
+    if (newSeasonEps.length > 0) {
+      const firstEp = newSeasonEps[0];
+      const targetSeason = seasons.find((s) => s.id === newSeasonId);
+      if (targetSeason) {
+        navigate({
+          to: "/watch/$animeId/$seasonNumber/$episodeId",
+          params: {
+            animeId,
+            seasonNumber: String(targetSeason.seasonNumber),
+            episodeId: firstEp.id,
+          },
+        });
+      }
+    }
+  };
+
+  // Redirect legacy routes to canonical URL
   useEffect(() => {
     if (!isLegacy || !episode || seasons.length === 0) return;
     const targetSeason = episode.seasonId
@@ -426,13 +652,11 @@ export default function WatchPage() {
     });
   }, [isLegacy, episode, seasons, animeId, episodeId, navigate]);
 
-  // Filter episodes by active season
   const seasonEpisodes =
     activeSeason !== null
       ? allEpisodes.filter((ep) => ep.seasonId === activeSeason)
       : allEpisodes;
 
-  // Nav — relative to current season's episodes
   const currentIdx = seasonEpisodes.findIndex((e) => e.id === episodeId);
   const prevEpisode = currentIdx > 0 ? seasonEpisodes[currentIdx - 1] : null;
   const nextEpisode =
@@ -440,7 +664,6 @@ export default function WatchPage() {
       ? seasonEpisodes[currentIdx + 1]
       : null;
 
-  // Canonical link helper with season number
   const watchLink = (epId: string, epSeasonId?: string) => {
     if (seasons.length === 0) {
       return {
@@ -458,6 +681,12 @@ export default function WatchPage() {
       to: "/watch/$animeId/$seasonNumber/$episodeId" as const,
       params: { animeId, seasonNumber: sNum, episodeId: epId },
     };
+  };
+
+  const handleEpisodeNavClick = (ep: Episode) => {
+    const link = watchLink(ep.id, ep.seasonId ?? undefined);
+    navigate(link);
+    setSidebarOpen(false);
   };
 
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -483,7 +712,6 @@ export default function WatchPage() {
   const retryCountRef = useRef(0);
   const [isRetrying, setIsRetrying] = useState(false);
 
-  // Reset video state when episode changes
   const episodeIdRef = useRef(episodeId);
   useEffect(() => {
     if (episodeIdRef.current === episodeId) return;
@@ -712,7 +940,6 @@ export default function WatchPage() {
     localStorage.setItem(STORAGE_KEY, q);
   };
 
-  // Keyboard shortcuts
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if ((e.target as HTMLElement).tagName === "INPUT") return;
@@ -776,436 +1003,475 @@ export default function WatchPage() {
           </div>
         )}
 
-        {nextEpisode && (
+        <div className="flex items-center gap-2 shrink-0">
+          {/* Episodes toggle — mobile/tablet, hidden on lg where sidebar is always visible */}
           <Button
+            variant="ghost"
             size="sm"
-            asChild
-            className="shrink-0 bg-primary hover:bg-primary/90 text-white gap-1.5 text-xs"
-            data-ocid="next-ep-header-btn"
+            onClick={() => setSidebarOpen((o) => !o)}
+            className="lg:hidden gap-1.5 text-muted-foreground hover:text-foreground text-xs"
+            data-ocid="episode-list-toggle"
+            aria-label="Toggle episode list"
+            aria-expanded={sidebarOpen}
           >
-            <Link
-              {...watchLink(nextEpisode.id, nextEpisode.seasonId ?? undefined)}
-            >
-              Next <SkipForward className="w-3.5 h-3.5" />
-            </Link>
+            <List className="w-4 h-4" />
+            <span className="hidden sm:inline">Episodes</span>
           </Button>
-        )}
+
+          {nextEpisode && (
+            <Button
+              size="sm"
+              asChild
+              className="bg-primary hover:bg-primary/90 text-white gap-1.5 text-xs"
+              data-ocid="next-ep-header-btn"
+            >
+              <Link
+                {...watchLink(
+                  nextEpisode.id,
+                  nextEpisode.seasonId ?? undefined,
+                )}
+              >
+                Next <SkipForward className="w-3.5 h-3.5" />
+              </Link>
+            </Button>
+          )}
+        </div>
       </div>
 
-      {/* ── Player container ─────────────────────────────────────────── */}
-      <div
-        ref={containerRef}
-        className="relative flex-1 bg-black flex items-center justify-center"
-        style={{ cursor: showControls ? "default" : "none" }}
-        onMouseMove={handleMouseMove}
-        onMouseLeave={() => playing && setShowControls(false)}
-        data-ocid="video-player"
-      >
-        {showAd && activeAd?.videoUrl && (
-          <PreRollAd
-            videoUrl={activeAd.videoUrl}
-            onComplete={handleAdComplete}
-          />
-        )}
+      {/* ── Main content: player + sidebar ───────────────────────────── */}
+      <div className="flex flex-1 min-h-0">
+        {/* Player column */}
+        <div className="flex-1 flex flex-col min-w-0">
+          {/* ── Player container ─────────────────────────────────────── */}
+          <div
+            ref={containerRef}
+            className="relative flex-1 bg-black flex items-center justify-center"
+            style={{ cursor: showControls ? "default" : "none" }}
+            onMouseMove={handleMouseMove}
+            onMouseLeave={() => playing && setShowControls(false)}
+            data-ocid="video-player"
+          >
+            {showAd && activeAd?.videoUrl && (
+              <PreRollAd
+                videoUrl={activeAd.videoUrl}
+                onComplete={handleAdComplete}
+              />
+            )}
 
-        {rawVideoUrl ? (
-          <div className="relative w-full flex items-center justify-center">
-            {videoType === "youtube" && youTubeId ? (
-              <div className="w-full max-h-[calc(100vh-13rem)]">
-                <IframePlayer
-                  src={`https://www.youtube.com/embed/${youTubeId}?autoplay=1&enablejsapi=1&rel=0&fs=1&modestbranding=1&playsinline=0`}
-                  title="YouTube video player"
-                  isFullscreen={fullscreen}
-                  onToggleFullscreen={toggleFullscreen}
-                />
-              </div>
-            ) : videoType === "googledrive" ? (
-              <div className="w-full max-h-[calc(100vh-13rem)]">
-                {googleDriveInvalid ? (
-                  <div className="flex flex-col items-center justify-center gap-4 h-64">
-                    <AlertCircle className="w-12 h-12 text-destructive" />
-                    <div className="text-center space-y-1 px-6">
-                      <p className="text-foreground font-semibold text-base">
-                        Invalid Google Drive link
-                      </p>
-                      <p className="text-muted-foreground text-sm max-w-xs">
-                        Please share the file using "Anyone with the link"
-                        option and copy the share URL.
-                      </p>
-                    </div>
+            {rawVideoUrl ? (
+              <div className="relative w-full flex items-center justify-center">
+                {videoType === "youtube" && youTubeId ? (
+                  <div className="w-full max-h-[calc(100vh-13rem)]">
+                    <IframePlayer
+                      src={`https://www.youtube.com/embed/${youTubeId}?autoplay=1&enablejsapi=1&rel=0&fs=1&modestbranding=1&playsinline=0`}
+                      title="YouTube video player"
+                      isFullscreen={fullscreen}
+                      onToggleFullscreen={toggleFullscreen}
+                    />
+                  </div>
+                ) : videoType === "googledrive" ? (
+                  <div className="w-full max-h-[calc(100vh-13rem)]">
+                    {googleDriveInvalid ? (
+                      <div className="flex flex-col items-center justify-center gap-4 h-64">
+                        <AlertCircle className="w-12 h-12 text-destructive" />
+                        <div className="text-center space-y-1 px-6">
+                          <p className="text-foreground font-semibold text-base">
+                            Invalid Google Drive link
+                          </p>
+                          <p className="text-muted-foreground text-sm max-w-xs">
+                            Please share the file using "Anyone with the link"
+                            option and copy the share URL.
+                          </p>
+                        </div>
+                      </div>
+                    ) : (
+                      <IframePlayer
+                        src={googleDriveEmbedUrl!}
+                        title="Google Drive video player"
+                        isFullscreen={fullscreen}
+                        onToggleFullscreen={toggleFullscreen}
+                        showDriveNotice={true}
+                      />
+                    )}
                   </div>
                 ) : (
-                  <IframePlayer
-                    src={googleDriveEmbedUrl!}
-                    title="Google Drive video player"
-                    isFullscreen={fullscreen}
-                    onToggleFullscreen={toggleFullscreen}
-                    showDriveNotice={true}
-                  />
+                  <>
+                    {(videoBuffering || isLoading) &&
+                      !videoError &&
+                      !isRetrying && <VideoLoadingOverlay />}
+                    {(videoError || isRetrying) && (
+                      <VideoErrorOverlay
+                        message={videoErrorMessage}
+                        isRetrying={isRetrying}
+                        canRetry={!isRetrying}
+                        onRetry={handleRetry}
+                      />
+                    )}
+                    <video
+                      ref={videoRef}
+                      key={resolvedVideoUrl}
+                      src={resolvedVideoUrl}
+                      className="w-full max-h-[calc(100vh-13rem)] object-contain"
+                      preload="metadata"
+                      playsInline
+                      onLoadStart={() => setIsLoading(true)}
+                      onTimeUpdate={(e) =>
+                        setCurrentTime(e.currentTarget.currentTime)
+                      }
+                      onLoadedMetadata={(e) => {
+                        setDuration(e.currentTarget.duration);
+                        setIsLoading(false);
+                        setVideoBuffering(false);
+                        setVideoError(false);
+                        setIsRetrying(false);
+                      }}
+                      onWaiting={() => setVideoBuffering(true)}
+                      onCanPlay={() => {
+                        setIsLoading(false);
+                        setVideoBuffering(false);
+                      }}
+                      onPlaying={() => {
+                        setIsLoading(false);
+                        setVideoBuffering(false);
+                        setVideoError(false);
+                        setIsRetrying(false);
+                      }}
+                      onPlay={() => setPlaying(true)}
+                      onPause={() => setPlaying(false)}
+                      onError={handleVideoError}
+                    >
+                      <track kind="captions" />
+                    </video>
+                    {!videoError && !isRetrying && (
+                      <button
+                        type="button"
+                        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                        onClick={togglePlay}
+                        onKeyDown={(e) => e.key === " " && togglePlay()}
+                        aria-label={playing ? "Pause video" : "Play video"}
+                      />
+                    )}
+                  </>
                 )}
               </div>
             ) : (
-              <>
-                {(videoBuffering || isLoading) &&
-                  !videoError &&
-                  !isRetrying && <VideoLoadingOverlay />}
-                {(videoError || isRetrying) && (
-                  <VideoErrorOverlay
-                    message={videoErrorMessage}
-                    isRetrying={isRetrying}
-                    canRetry={!isRetrying}
-                    onRetry={handleRetry}
-                  />
-                )}
-                <video
-                  ref={videoRef}
-                  key={resolvedVideoUrl}
-                  src={resolvedVideoUrl}
-                  className="w-full max-h-[calc(100vh-13rem)] object-contain"
-                  preload="metadata"
-                  playsInline
-                  onLoadStart={() => setIsLoading(true)}
-                  onTimeUpdate={(e) =>
-                    setCurrentTime(e.currentTarget.currentTime)
-                  }
-                  onLoadedMetadata={(e) => {
-                    setDuration(e.currentTarget.duration);
-                    setIsLoading(false);
-                    setVideoBuffering(false);
-                    setVideoError(false);
-                    setIsRetrying(false);
-                  }}
-                  onWaiting={() => setVideoBuffering(true)}
-                  onCanPlay={() => {
-                    setIsLoading(false);
-                    setVideoBuffering(false);
-                  }}
-                  onPlaying={() => {
-                    setIsLoading(false);
-                    setVideoBuffering(false);
-                    setVideoError(false);
-                    setIsRetrying(false);
-                  }}
-                  onPlay={() => setPlaying(true)}
-                  onPause={() => setPlaying(false)}
-                  onError={handleVideoError}
-                >
-                  <track kind="captions" />
-                </video>
-                {!videoError && !isRetrying && (
-                  <button
-                    type="button"
-                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                    onClick={togglePlay}
-                    onKeyDown={(e) => e.key === " " && togglePlay()}
-                    aria-label={playing ? "Pause video" : "Play video"}
-                  />
-                )}
-              </>
-            )}
-          </div>
-        ) : (
-          <div
-            className="flex flex-col items-center justify-center gap-4 h-64"
-            data-ocid="no-video"
-          >
-            <div className="w-14 h-14 border-2 border-muted rounded-full flex items-center justify-center">
-              <Play className="w-6 h-6 text-muted-foreground" />
-            </div>
-            <p className="text-muted-foreground text-sm">
-              {episode
-                ? "No video source assigned to this episode."
-                : "Episode not found."}
-            </p>
-          </div>
-        )}
-
-        {/* Big play/pause indicator — only for HTML5 player */}
-        {!showAd && !videoError && videoType === "html5" && (
-          <div
-            className="absolute inset-0 flex items-center justify-center pointer-events-none"
-            aria-hidden
-          >
-            <div
-              className={[
-                "bg-black/50 rounded-full p-4 transition-opacity duration-200",
-                playing ? "opacity-0" : "opacity-100",
-              ].join(" ")}
-            >
-              <Play className="w-10 h-10 text-white fill-white" />
-            </div>
-          </div>
-        )}
-
-        {/* ── Controls overlay ─────────────────────────────────────── */}
-        {!showAd && !videoError && (
-          <div
-            className={[
-              "absolute inset-0 flex flex-col justify-end transition-opacity duration-300 pointer-events-none",
-              isIframePlayer
-                ? "opacity-0"
-                : showControls || !playing
-                  ? "opacity-100"
-                  : "opacity-0",
-            ].join(" ")}
-          >
-            {videoType === "html5" && (
-              <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-transparent to-black/30" />
-            )}
-
-            <div className="relative pointer-events-auto px-3 sm:px-5 pb-3 sm:pb-4 space-y-2">
-              {videoType === "html5" && (
-                <div className="relative group/progress">
-                  <Slider
-                    value={[currentTime]}
-                    min={0}
-                    max={duration || 100}
-                    step={0.5}
-                    onValueChange={handleSeek}
-                    className="cursor-pointer [&_[role=slider]]:bg-primary [&_[role=slider]]:border-primary [&_.bg-primary]:bg-primary"
-                    data-ocid="video-progress"
-                  />
-                  <div
-                    className="absolute -top-6 text-[10px] font-mono bg-black/80 text-white px-1.5 py-0.5 rounded pointer-events-none"
-                    style={{
-                      left: `clamp(0px, ${progressPct}%, calc(100% - 48px))`,
-                    }}
-                  >
-                    {formatTime(currentTime)}
-                  </div>
+              <div
+                className="flex flex-col items-center justify-center gap-4 h-64"
+                data-ocid="no-video"
+              >
+                <div className="w-14 h-14 border-2 border-muted rounded-full flex items-center justify-center">
+                  <Play className="w-6 h-6 text-muted-foreground" />
                 </div>
-              )}
+                <p className="text-muted-foreground text-sm">
+                  {episode
+                    ? "No video source assigned to this episode."
+                    : "Episode not found."}
+                </p>
+              </div>
+            )}
 
-              <div className="flex items-center justify-between gap-2">
+            {/* Big play/pause indicator — only for HTML5 player */}
+            {!showAd && !videoError && videoType === "html5" && (
+              <div
+                className="absolute inset-0 flex items-center justify-center pointer-events-none"
+                aria-hidden
+              >
+                <div
+                  className={[
+                    "bg-black/50 rounded-full p-4 transition-opacity duration-200",
+                    playing ? "opacity-0" : "opacity-100",
+                  ].join(" ")}
+                >
+                  <Play className="w-10 h-10 text-white fill-white" />
+                </div>
+              </div>
+            )}
+
+            {/* ── Controls overlay ─────────────────────────────────── */}
+            {!showAd && !videoError && (
+              <div
+                className={[
+                  "absolute inset-0 flex flex-col justify-end transition-opacity duration-300 pointer-events-none",
+                  isIframePlayer
+                    ? "opacity-0"
+                    : showControls || !playing
+                      ? "opacity-100"
+                      : "opacity-0",
+                ].join(" ")}
+              >
                 {videoType === "html5" && (
-                  <div className="flex items-center gap-1 sm:gap-2">
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => skip(-10)}
-                      className="text-white hover:bg-white/10 p-2 h-9 w-9"
-                      aria-label="Skip back 10 seconds"
-                      data-ocid="skip-back"
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-transparent to-black/30" />
+                )}
+
+                <div className="relative pointer-events-auto px-3 sm:px-5 pb-3 sm:pb-4 space-y-2">
+                  {videoType === "html5" && (
+                    <div className="relative group/progress">
+                      <Slider
+                        value={[currentTime]}
+                        min={0}
+                        max={duration || 100}
+                        step={0.5}
+                        onValueChange={handleSeek}
+                        className="cursor-pointer [&_[role=slider]]:bg-primary [&_[role=slider]]:border-primary [&_.bg-primary]:bg-primary"
+                        data-ocid="video-progress"
+                      />
+                      <div
+                        className="absolute -top-6 text-[10px] font-mono bg-black/80 text-white px-1.5 py-0.5 rounded pointer-events-none"
+                        style={{
+                          left: `clamp(0px, ${progressPct}%, calc(100% - 48px))`,
+                        }}
+                      >
+                        {formatTime(currentTime)}
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="flex items-center justify-between gap-2">
+                    {videoType === "html5" && (
+                      <div className="flex items-center gap-1 sm:gap-2">
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => skip(-10)}
+                          className="text-white hover:bg-white/10 p-2 h-9 w-9"
+                          aria-label="Skip back 10 seconds"
+                          data-ocid="skip-back"
+                        >
+                          <SkipBack className="w-5 h-5" />
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={togglePlay}
+                          className="text-white hover:bg-white/10 p-2 h-10 w-10"
+                          aria-label={playing ? "Pause" : "Play"}
+                          data-ocid="play-pause"
+                        >
+                          {playing ? (
+                            <Pause className="w-6 h-6 fill-white" />
+                          ) : (
+                            <Play className="w-6 h-6 fill-white" />
+                          )}
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => skip(10)}
+                          className="text-white hover:bg-white/10 p-2 h-9 w-9"
+                          aria-label="Skip forward 10 seconds"
+                          data-ocid="skip-forward"
+                        >
+                          <SkipForward className="w-5 h-5" />
+                        </Button>
+                        <div className="flex items-center gap-1.5">
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={toggleMute}
+                            className="text-white hover:bg-white/10 p-2 h-9 w-9"
+                            aria-label={muted ? "Unmute" : "Mute"}
+                            data-ocid="volume-toggle"
+                          >
+                            {muted || volume === 0 ? (
+                              <VolumeX className="w-5 h-5" />
+                            ) : (
+                              <Volume2 className="w-5 h-5" />
+                            )}
+                          </Button>
+                          <div className="w-18 hidden sm:block">
+                            <Slider
+                              value={[muted ? 0 : volume]}
+                              min={0}
+                              max={1}
+                              step={0.05}
+                              onValueChange={handleVolumeChange}
+                              className="[&_[role=slider]]:bg-white [&_.bg-primary]:bg-white"
+                              data-ocid="volume-slider"
+                            />
+                          </div>
+                        </div>
+                        <span className="text-white text-xs font-mono hidden sm:block whitespace-nowrap">
+                          {formatTime(currentTime)}
+                          <span className="text-white/50 mx-0.5">/</span>
+                          {formatTime(duration)}
+                        </span>
+                      </div>
+                    )}
+
+                    <div
+                      className={[
+                        "flex items-center gap-1",
+                        isIframePlayer ? "ml-auto" : "",
+                      ].join(" ")}
                     >
-                      <SkipBack className="w-5 h-5" />
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      onClick={togglePlay}
-                      className="text-white hover:bg-white/10 p-2 h-10 w-10"
-                      aria-label={playing ? "Pause" : "Play"}
-                      data-ocid="play-pause"
-                    >
-                      {playing ? (
-                        <Pause className="w-6 h-6 fill-white" />
-                      ) : (
-                        <Play className="w-6 h-6 fill-white" />
+                      {videoType === "html5" && (
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="text-white hover:bg-white/10 gap-1 text-xs h-9 px-2"
+                              data-ocid="quality-selector"
+                            >
+                              <Settings className="w-4 h-4" />
+                              <span className="hidden sm:inline font-mono">
+                                {quality}
+                              </span>
+                              <ChevronDown className="w-3 h-3" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent
+                            align="end"
+                            className="bg-card border-border min-w-[5rem]"
+                          >
+                            {QUALITY_OPTIONS.map((q) => (
+                              <DropdownMenuItem
+                                key={q}
+                                onClick={() => handleQualityChange(q)}
+                                className={[
+                                  "font-mono text-xs cursor-pointer",
+                                  quality === q ? "text-primary font-bold" : "",
+                                ].join(" ")}
+                                data-ocid={`quality-${q}`}
+                              >
+                                {quality === q && (
+                                  <span className="mr-1.5">✓</span>
+                                )}
+                                {q}
+                              </DropdownMenuItem>
+                            ))}
+                          </DropdownMenuContent>
+                        </DropdownMenu>
                       )}
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => skip(10)}
-                      className="text-white hover:bg-white/10 p-2 h-9 w-9"
-                      aria-label="Skip forward 10 seconds"
-                      data-ocid="skip-forward"
-                    >
-                      <SkipForward className="w-5 h-5" />
-                    </Button>
-                    <div className="flex items-center gap-1.5">
                       <Button
                         type="button"
                         variant="ghost"
                         size="sm"
-                        onClick={toggleMute}
+                        onClick={toggleFullscreen}
                         className="text-white hover:bg-white/10 p-2 h-9 w-9"
-                        aria-label={muted ? "Unmute" : "Mute"}
-                        data-ocid="volume-toggle"
+                        aria-label={
+                          fullscreen ? "Exit fullscreen" : "Fullscreen"
+                        }
+                        data-ocid="fullscreen-toggle"
                       >
-                        {muted || volume === 0 ? (
-                          <VolumeX className="w-5 h-5" />
+                        {fullscreen ? (
+                          <Minimize className="w-4 h-4" />
                         ) : (
-                          <Volume2 className="w-5 h-5" />
+                          <Maximize className="w-4 h-4" />
                         )}
                       </Button>
-                      <div className="w-18 hidden sm:block">
-                        <Slider
-                          value={[muted ? 0 : volume]}
-                          min={0}
-                          max={1}
-                          step={0.05}
-                          onValueChange={handleVolumeChange}
-                          className="[&_[role=slider]]:bg-white [&_.bg-primary]:bg-white"
-                          data-ocid="volume-slider"
-                        />
-                      </div>
                     </div>
-                    <span className="text-white text-xs font-mono hidden sm:block whitespace-nowrap">
-                      {formatTime(currentTime)}
-                      <span className="text-white/50 mx-0.5">/</span>
-                      {formatTime(duration)}
-                    </span>
                   </div>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* ── Season selector + episode navigation bar ────────────── */}
+          <div className="bg-[#0a0a0a] border-t border-border/50 px-4 py-3">
+            <div className="max-w-5xl mx-auto space-y-3">
+              {seasons.length > 0 && (
+                <div
+                  className="flex items-center gap-3 flex-wrap"
+                  data-ocid="watch-season-bar"
+                >
+                  <span className="text-[10px] font-semibold text-white/40 uppercase tracking-wider shrink-0">
+                    Season
+                  </span>
+                  <SeasonSelector
+                    seasons={seasons}
+                    activeSeason={activeSeason}
+                    onSeasonChange={handleSeasonChange}
+                  />
+                </div>
+              )}
+
+              <div className="flex items-center justify-between gap-4">
+                {prevEpisode ? (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    asChild
+                    className="gap-2 border-border text-foreground hover:bg-secondary"
+                    data-ocid="prev-episode-btn"
+                  >
+                    <Link
+                      {...watchLink(
+                        prevEpisode.id,
+                        prevEpisode.seasonId ?? undefined,
+                      )}
+                    >
+                      <SkipBack className="w-4 h-4" />
+                      <span className="hidden sm:inline">
+                        Ep {Number(prevEpisode.episodeNumber)}
+                      </span>
+                    </Link>
+                  </Button>
+                ) : (
+                  <div />
                 )}
 
-                <div
-                  className={[
-                    "flex items-center gap-1",
-                    isIframePlayer ? "ml-auto" : "",
-                  ].join(" ")}
-                >
-                  {videoType === "html5" && (
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="text-white hover:bg-white/10 gap-1 text-xs h-9 px-2"
-                          data-ocid="quality-selector"
-                        >
-                          <Settings className="w-4 h-4" />
-                          <span className="hidden sm:inline font-mono">
-                            {quality}
-                          </span>
-                          <ChevronDown className="w-3 h-3" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent
-                        align="end"
-                        className="bg-card border-border min-w-[5rem]"
-                      >
-                        {QUALITY_OPTIONS.map((q) => (
-                          <DropdownMenuItem
-                            key={q}
-                            onClick={() => handleQualityChange(q)}
-                            className={[
-                              "font-mono text-xs cursor-pointer",
-                              quality === q ? "text-primary font-bold" : "",
-                            ].join(" ")}
-                            data-ocid={`quality-${q}`}
-                          >
-                            {quality === q && <span className="mr-1.5">✓</span>}
-                            {q}
-                          </DropdownMenuItem>
-                        ))}
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  )}
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    onClick={toggleFullscreen}
-                    className="text-white hover:bg-white/10 p-2 h-9 w-9"
-                    aria-label={fullscreen ? "Exit fullscreen" : "Fullscreen"}
-                    data-ocid="fullscreen-toggle"
-                  >
-                    {fullscreen ? (
-                      <Minimize className="w-4 h-4" />
-                    ) : (
-                      <Maximize className="w-4 h-4" />
+                <div className="text-center min-w-0">
+                  <p className="text-[10px] text-muted-foreground uppercase tracking-widest font-mono">
+                    Episode {epNumber} of {seasonEpisodes.length}
+                    {seasons.length > 0 && activeSeason && (
+                      <span className="text-primary ml-1">
+                        · {seasons.find((s) => s.id === activeSeason)?.name}
+                      </span>
                     )}
-                  </Button>
+                  </p>
+                  <p className="text-sm font-semibold text-foreground truncate max-w-xs">
+                    {episode?.title}
+                  </p>
                 </div>
+
+                {nextEpisode ? (
+                  <Button
+                    variant="default"
+                    size="sm"
+                    asChild
+                    className="gap-2 bg-primary hover:bg-primary/90 text-white"
+                    data-ocid="next-episode-btn"
+                  >
+                    <Link
+                      {...watchLink(
+                        nextEpisode.id,
+                        nextEpisode.seasonId ?? undefined,
+                      )}
+                    >
+                      <span className="hidden sm:inline">
+                        Ep {Number(nextEpisode.episodeNumber)}
+                      </span>
+                      <SkipForward className="w-4 h-4" />
+                    </Link>
+                  </Button>
+                ) : (
+                  <div />
+                )}
               </div>
             </div>
           </div>
-        )}
-      </div>
 
-      {/* ── Season selector + episode navigation bar ──────────────────── */}
-      <div className="bg-[#0a0a0a] border-t border-border/50 px-4 py-3">
-        <div className="max-w-5xl mx-auto space-y-3">
-          {/* Season selector */}
-          {seasons.length > 0 && (
-            <div
-              className="flex items-center gap-3 flex-wrap"
-              data-ocid="watch-season-bar"
-            >
-              <span className="text-[10px] font-semibold text-white/40 uppercase tracking-wider shrink-0">
-                Season
-              </span>
-              <SeasonSelector
-                seasons={seasons}
-                activeSeason={activeSeason}
-                onSeasonChange={setActiveSeason}
-              />
-            </div>
-          )}
-
-          {/* Prev / episode info / next */}
-          <div className="flex items-center justify-between gap-4">
-            {prevEpisode ? (
-              <Button
-                variant="outline"
-                size="sm"
-                asChild
-                className="gap-2 border-border text-foreground hover:bg-secondary"
-                data-ocid="prev-episode-btn"
-              >
-                <Link
-                  {...watchLink(
-                    prevEpisode.id,
-                    prevEpisode.seasonId ?? undefined,
-                  )}
-                >
-                  <SkipBack className="w-4 h-4" />
-                  <span className="hidden sm:inline">
-                    Ep {Number(prevEpisode.episodeNumber)}
-                  </span>
-                </Link>
-              </Button>
-            ) : (
-              <div />
-            )}
-
-            <div className="text-center min-w-0">
-              <p className="text-[10px] text-muted-foreground uppercase tracking-widest font-mono">
-                Episode {epNumber} of {seasonEpisodes.length}
-                {seasons.length > 0 && activeSeason && (
-                  <span className="text-primary ml-1">
-                    · {seasons.find((s) => s.id === activeSeason)?.name}
-                  </span>
-                )}
-              </p>
-              <p className="text-sm font-semibold text-foreground truncate max-w-xs">
-                {episode?.title}
-              </p>
-            </div>
-
-            {nextEpisode ? (
-              <Button
-                variant="default"
-                size="sm"
-                asChild
-                className="gap-2 bg-primary hover:bg-primary/90 text-white"
-                data-ocid="next-episode-btn"
-              >
-                <Link
-                  {...watchLink(
-                    nextEpisode.id,
-                    nextEpisode.seasonId ?? undefined,
-                  )}
-                >
-                  <span className="hidden sm:inline">
-                    Ep {Number(nextEpisode.episodeNumber)}
-                  </span>
-                  <SkipForward className="w-4 h-4" />
-                </Link>
-              </Button>
-            ) : (
-              <div />
-            )}
-          </div>
+          {/* ── Rating & Comments ──────────────────────────────────── */}
+          <EpisodeComments episodeId={episodeId} animeId={animeId} />
         </div>
-      </div>
 
-      {/* ── Rating & Comments ────────────────────────────────────────── */}
-      <EpisodeComments episodeId={episodeId} animeId={animeId} />
+        {/* ── Episode Sidebar (desktop: fixed right column; mobile: drawer) ── */}
+        <EpisodeSidebar
+          episodes={seasonEpisodes}
+          currentEpisodeId={episodeId}
+          seasons={seasons}
+          activeSeason={activeSeason}
+          onSeasonChange={handleSeasonChange}
+          onEpisodeClick={handleEpisodeNavClick}
+          isOpen={sidebarOpen}
+          onClose={() => setSidebarOpen(false)}
+        />
+      </div>
     </div>
   );
 }

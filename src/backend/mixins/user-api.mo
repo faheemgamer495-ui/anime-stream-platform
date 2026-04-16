@@ -1,30 +1,26 @@
-import List "mo:core/List";
-import Time "mo:core/Time";
 import Runtime "mo:core/Runtime";
 import UserTypes "../types/user";
-import UserLib "../lib/user";
 
-mixin (users : List.List<UserTypes.User>) {
+/// User API contract — array-based, matches main.mo stable-var pattern.
+/// NOTE: Not included in main.mo; methods are inline there. Reference only.
+mixin (users : [UserTypes.User]) {
   public shared ({ caller }) func registerUser(input : UserTypes.UserInput) : async UserTypes.UserPublic {
-    UserLib.register(users, caller, input, Time.now());
+    Runtime.trap("not implemented");
   };
 
   public query ({ caller }) func getUser() : async ?UserTypes.UserPublic {
-    UserLib.getById(users, caller);
+    Runtime.trap("not implemented");
   };
 
   public shared ({ caller }) func updateUser(input : UserTypes.UserInput) : async ?UserTypes.UserPublic {
-    UserLib.update(users, caller, input);
+    Runtime.trap("not implemented");
   };
 
   public query ({ caller }) func isAdminUser() : async Bool {
-    UserLib.isAdmin(users, caller);
+    Runtime.trap("not implemented");
   };
 
   public query ({ caller }) func listAllUsers() : async [UserTypes.UserPublic] {
-    if (not UserLib.isAdmin(users, caller)) {
-      Runtime.trap("Unauthorized: admin only");
-    };
-    UserLib.listAll(users);
+    Runtime.trap("not implemented");
   };
 };

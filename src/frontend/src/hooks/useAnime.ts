@@ -1,275 +1,213 @@
-import { useActor } from "@caffeineai/core-infrastructure";
+/**
+ * useAnime — hooks for anime/season/episode/watchlist data.
+ *
+ * Two layers:
+ * 1. Context-backed (canister-first, localStorage fallback) — hooks with "Ctx" suffix.
+ * 2. localStorage / React Query — all existing exports kept for backward compatibility.
+ *    These still serve as the source of initial data while the canister is loading;
+ *    staleTime: 0 ensures React Query always refetches from localStorage on mount,
+ *    and AppContext's actorReady effect triggers a full canister-backed refresh.
+ *
+ * New hooks: useAnimeCtx, useAnimeDetailCtx, useEpisodeDataCtx, useWatchlistCtx.
+ */
+
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect } from "react";
-import { createActor } from "../backend";
-import type { AnimeInput, AnimePublic } from "../backend.d";
-import type { Anime, AnimeFormData } from "../types";
+import type { AnimePublic, Comment, Episode, SeasonPublic } from "../backend";
+import { useAppContext } from "../context/AppContext";
+import {
+  generateId,
+  getAnimeList,
+  removeAnime,
+  saveAnimeList,
+  upsertAnime,
+} from "../lib/localStorageDB";
+import type { Anime, AnimeFormData, RatingsInfo } from "../types";
 
-// ── localStorage cache helpers ────────────────────────────────────────────────
-// localStorage is a short-lived cache only — the backend canister is ALWAYS the
-// source of truth. Never read from localStorage when the actor is available.
+// ── Canister-backed hooks ─────────────────────────────────────────────────────
 
-export function saveData(key: string, data: unknown): void {
+/** Returns the full anime list from AppContext (canister-first, localStorage fallback). */
+export function useAnimeCtx() {
+  const { anime, loading, errors, refreshAnime } = useAppContext();
+  return {
+    data: anime,
+    isLoading: loading["anime.list"] ?? false,
+    error: errors["anime.list"] ?? null,
+    refetch: refreshAnime,
+  };
+}
+
+/** Returns a single anime + its seasons and episodes, loaded on mount. */
+export function useAnimeDetailCtx(animeId: string | undefined) {
+  const { anime, seasons, episodes, loading, loadAnimeDetail } =
+    useAppContext();
+
+  useEffect(() => {
+    if (animeId) loadAnimeDetail(animeId).catch(console.error);
+  }, [animeId, loadAnimeDetail]);
+
+  const item: AnimePublic | null = animeId
+    ? (anime.find((a) => a.id === animeId) ?? null)
+    : null;
+
+  return {
+    anime: item,
+    seasons: (animeId ? seasons[animeId] : undefined) ?? ([] as SeasonPublic[]),
+    episodes: (animeId ? episodes[animeId] : undefined) ?? ([] as Episode[]),
+    isLoading: loading[`detail.${animeId}`] ?? false,
+  };
+}
+
+/** Loads and returns comments + ratings for one episode from AppContext. */
+export function useEpisodeDataCtx(episodeId: string | undefined) {
+  const { comments, ratings, loading, loadEpisodeData } = useAppContext();
+
+  useEffect(() => {
+    if (episodeId) loadEpisodeData(episodeId).catch(console.error);
+  }, [episodeId, loadEpisodeData]);
+
+  return {
+    comments:
+      (episodeId ? comments[episodeId] : undefined) ?? ([] as Comment[]),
+    ratings:
+      (episodeId ? ratings[episodeId] : undefined) ??
+      ({
+        average: 0,
+        total: 0,
+        userRating: undefined,
+      } as RatingsInfo),
+    isLoading: loading[`episode.${episodeId}`] ?? false,
+  };
+}
+
+/** Returns watchlist anime ids and toggle action from AppContext. */
+export function useWatchlistCtx() {
+  const { watchlist, anime, toggleWatchlist } = useAppContext();
+  const watchlistIds = new Set(watchlist);
+  const watchlistAnime = anime.filter((a) => watchlistIds.has(a.id));
+  return { watchlistIds, watchlistAnime, toggleWatchlist };
+}
+
+// ── Legacy cache helpers (kept for external consumers) ────────────────────────
+
+export function saveData<T>(key: string, data: T): void {
+  if (key === "anime_cache" && Array.isArray(data)) {
+    saveAnimeList(data as unknown as Anime[]);
+    return;
+  }
   try {
-    localStorage.setItem(key, JSON.stringify(data));
+    localStorage.setItem(key, JSON.stringify({ data, timestamp: Date.now() }));
   } catch {
-    // localStorage may be full or unavailable — fail silently
+    // ignore
   }
 }
 
 export function loadData<T>(key: string): T | null {
+  if (key === "anime_cache") {
+    const list = getAnimeList();
+    return (list.length > 0 ? list : null) as unknown as T | null;
+  }
   try {
     const raw = localStorage.getItem(key);
     if (!raw) return null;
-    return JSON.parse(raw) as T;
+    const parsed = JSON.parse(raw) as Record<string, unknown> | T;
+    if (
+      parsed &&
+      typeof parsed === "object" &&
+      "timestamp" in parsed &&
+      "data" in parsed
+    ) {
+      return (parsed as { data: T }).data;
+    }
+    return parsed as T;
   } catch {
     return null;
   }
 }
 
-// ── Cache version migration ────────────────────────────────────────────────────
-// If the browser has stale preview-era data (pre-v2), clear it so the live site
-// always fetches fresh data from the backend instead of serving cached preview data.
-const CACHE_VERSION_KEY = "data_version";
-const CACHE_VERSION = "v2";
-const STALE_CACHE_KEYS = ["anime_cache", "episodes_cache"];
-
-function clearStaleCacheOnce(): void {
+export function clearCacheKey(key: string): void {
   try {
-    if (localStorage.getItem(CACHE_VERSION_KEY) !== CACHE_VERSION) {
-      for (const key of STALE_CACHE_KEYS) {
-        localStorage.removeItem(key);
-      }
-      localStorage.setItem(CACHE_VERSION_KEY, CACHE_VERSION);
-    }
+    localStorage.removeItem(key);
   } catch {
-    // localStorage unavailable — ignore
+    // ignore
   }
 }
 
-// Run once at module load time so it happens before any query reads the cache.
-clearStaleCacheOnce();
-
-// ── Retry helper ──────────────────────────────────────────────────────────────
-
-async function withRetry<T>(
-  fn: () => Promise<T>,
-  retries = 1,
-  delayMs = 2000,
-): Promise<T> {
-  try {
-    return await fn();
-  } catch (err) {
-    if (retries <= 0) throw err;
-    await new Promise((res) => setTimeout(res, delayMs));
-    return withRetry(fn, retries - 1, delayMs);
-  }
-}
-
-// ── Type converters ───────────────────────────────────────────────────────────
-
-/** Convert backend AnimePublic → frontend Anime */
-function toAnime(pub: AnimePublic): Anime {
-  return {
-    id: pub.id,
-    title: pub.title,
-    description: pub.description,
-    genre: pub.genres ?? [],
-    rating: pub.rating,
-    thumbnailUrl: pub.coverImageUrl,
-    coverImageUrl: pub.coverImageUrl,
-    isFeatured: pub.isFeatured,
-    episodeCount: 0,
-    viewCount: Number(pub.viewCount ?? 0),
-    releaseYear:
-      new Date(Number(pub.createdAt) / 1_000_000).getFullYear() ||
-      new Date().getFullYear(),
-    status: "ongoing",
-    createdAt: Number(pub.createdAt ?? 0),
-  };
-}
-
-/** Convert frontend AnimeFormData → backend AnimeInput */
-function toAnimeInput(form: AnimeFormData): AnimeInput {
-  return {
-    title: form.title.trim(),
-    description: form.description.trim(),
-    genres: form.genre,
-    rating: form.rating,
-    coverImageUrl: form.coverImageUrl.trim() || form.thumbnailUrl.trim(),
-    isFeatured: form.isFeatured,
-  };
-}
-
-// ── Queries ───────────────────────────────────────────────────────────────────
+// ── localStorage-backed queries (backward compat) ─────────────────────────────
+// These read from the localStorage cache that AppContext keeps in sync with the
+// canister. staleTime: 0 ensures they always re-read on mount, and AppContext's
+// canister hydration causes cache writes that trigger React Query invalidations.
 
 export function useAllAnime() {
-  const { actor, isFetching } = useActor(createActor);
-  const queryClient = useQueryClient();
-
-  // When actor transitions from undefined → ready, invalidate so the query
-  // re-runs immediately even if it previously returned [] or cached data.
-  useEffect(() => {
-    if (actor) {
-      queryClient.invalidateQueries({ queryKey: ["anime", "all"] });
-    }
-  }, [actor, queryClient]);
-
+  const localSnapshot = getAnimeList();
   return useQuery<Anime[]>({
     queryKey: ["anime", "all"],
-    queryFn: async () => {
-      if (!actor) {
-        // Actor not yet initialized — throw so React Query retries via retry config
-        throw new Error("Actor not ready");
-      }
-      try {
-        // withRetry: try once more after 2s before propagating error
-        const result = await withRetry(() => actor.getAllAnime(), 1, 2000);
-        const list = result.map(toAnime);
-        // Backend is source of truth — update localStorage as offline backup only
-        saveData("anime_cache", list);
-        return list;
-      } catch (err) {
-        // Backend unreachable after retry — propagate so React Query retries
-        console.error("[useAllAnime] Backend fetch failed (after retry):", err);
-        throw new Error("Unable to load anime — please refresh the page");
-      }
-    },
-    // No initialData — do NOT pre-populate from localStorage cache; stale preview
-    // data in localStorage was masking real backend data on the live site.
-    enabled: !isFetching,
-    staleTime: 0, // Always fetch fresh data on mount
-    retry: 3,
-    retryDelay: 2000,
+    queryFn: () => getAnimeList(),
+    initialData: localSnapshot.length > 0 ? localSnapshot : undefined,
+    staleTime: 0,
   });
 }
 
 export function useFeaturedAnime() {
-  const { actor, isFetching } = useActor(createActor);
   return useQuery<Anime | null>({
     queryKey: ["anime", "featured"],
-    queryFn: async () => {
-      if (!actor) {
-        const cached = loadData<Anime[]>("anime_cache") ?? [];
-        return cached.find((a) => a.isFeatured) ?? cached[0] ?? null;
-      }
-      try {
-        const result = await withRetry(() => actor.getFeaturedAnime(), 1, 2000);
-        if (result.length > 0) return toAnime(result[0]);
-        // Backend returned empty — check cache
-        const cached = loadData<Anime[]>("anime_cache") ?? [];
-        return cached.find((a) => a.isFeatured) ?? cached[0] ?? null;
-      } catch (err) {
-        console.error("[useFeaturedAnime] Backend fetch failed:", err);
-        const cached = loadData<Anime[]>("anime_cache") ?? [];
-        return cached.find((a) => a.isFeatured) ?? cached[0] ?? null;
-      }
+    queryFn: () => {
+      const list = getAnimeList();
+      return list.find((a) => a.isFeatured) ?? list[0] ?? null;
     },
-    enabled: !isFetching,
-    staleTime: 0, // Always fetch fresh data on load
+    staleTime: 0,
   });
 }
 
 export function useAnimeDetail(id: string | undefined) {
-  const { actor, isFetching } = useActor(createActor);
   return useQuery<Anime | null>({
     queryKey: ["anime", id],
-    queryFn: async () => {
+    queryFn: () => {
       if (!id) return null;
-      if (!actor) {
-        // No initialData fallback — throw so retry mechanism kicks in
-        throw new Error("Actor not ready");
-      }
-      try {
-        const result = await actor.getAnime(id);
-        if (result) return toAnime(result);
-        return null;
-      } catch (err) {
-        console.error("[useAnimeDetail] Backend fetch failed:", err);
-        throw err;
-      }
+      return getAnimeList().find((a) => a.id === id) ?? null;
     },
-    enabled: !!id && !isFetching,
-    retry: 3,
-    retryDelay: 2000,
+    enabled: !!id,
+    staleTime: 0,
   });
 }
 
 export function useSearchAnime(query: string) {
-  const { actor, isFetching } = useActor(createActor);
   return useQuery<Anime[]>({
     queryKey: ["anime", "search", query],
-    queryFn: async () => {
+    queryFn: () => {
       if (!query.trim()) return [];
-      if (!actor) {
-        const cached = loadData<Anime[]>("anime_cache") ?? [];
-        const q = query.toLowerCase();
-        return cached.filter(
-          (a) =>
-            a.title.toLowerCase().includes(q) ||
-            a.description.toLowerCase().includes(q) ||
-            a.genre.some((g) => g.toLowerCase().includes(q)),
-        );
-      }
-      try {
-        const result = await actor.searchAnime(query);
-        return result.map(toAnime);
-      } catch (err) {
-        console.error("[useSearchAnime] Backend fetch failed:", err);
-        const cached = loadData<Anime[]>("anime_cache") ?? [];
-        const q = query.toLowerCase();
-        return cached.filter(
-          (a) =>
-            a.title.toLowerCase().includes(q) ||
-            a.description.toLowerCase().includes(q) ||
-            a.genre.some((g) => g.toLowerCase().includes(q)),
-        );
-      }
+      const q = query.toLowerCase();
+      return getAnimeList().filter(
+        (a) =>
+          a.title.toLowerCase().includes(q) ||
+          a.description.toLowerCase().includes(q) ||
+          a.genre.some((g) => g.toLowerCase().includes(q)),
+      );
     },
-    enabled: query.length > 1 && !isFetching,
+    enabled: query.length > 1,
   });
 }
 
 export function useAnimeByGenre(genre: string | null) {
-  const { actor, isFetching } = useActor(createActor);
   return useQuery<Anime[]>({
     queryKey: ["anime", "genre", genre],
-    queryFn: async () => {
-      if (!genre) {
-        if (!actor) return loadData<Anime[]>("anime_cache") ?? [];
-        try {
-          const result = await actor.getAllAnime();
-          return result.map(toAnime);
-        } catch {
-          return loadData<Anime[]>("anime_cache") ?? [];
-        }
-      }
-      if (!actor) {
-        const cached = loadData<Anime[]>("anime_cache") ?? [];
-        return cached.filter((a) => a.genre.includes(genre));
-      }
-      try {
-        const result = await actor.filterAnimeByGenre(genre);
-        return result.map(toAnime);
-      } catch (err) {
-        console.error("[useAnimeByGenre] Backend fetch failed:", err);
-        const cached = loadData<Anime[]>("anime_cache") ?? [];
-        return cached.filter((a) => a.genre.includes(genre));
-      }
+    queryFn: () => {
+      const list = getAnimeList();
+      if (!genre) return list;
+      return list.filter((a) => a.genre.includes(genre));
     },
-    enabled: !isFetching,
+    staleTime: 0,
   });
 }
 
-// Derived queries (client-side sort from all-anime cache)
 export function useTrendingAnime() {
   const { data: all = [] } = useAllAnime();
   return useQuery<Anime[]>({
     queryKey: ["anime", "trending"],
-    queryFn: async () =>
+    queryFn: () =>
       [...all].sort((a, b) => b.viewCount - a.viewCount).slice(0, 8),
     enabled: all.length > 0,
-    staleTime: 0, // Always reflect latest all-anime data
+    staleTime: 0,
   });
 }
 
@@ -277,10 +215,10 @@ export function useLatestAnime() {
   const { data: all = [] } = useAllAnime();
   return useQuery<Anime[]>({
     queryKey: ["anime", "latest"],
-    queryFn: async () =>
+    queryFn: () =>
       [...all].sort((a, b) => b.createdAt - a.createdAt).slice(0, 8),
     enabled: all.length > 0,
-    staleTime: 0, // Always reflect latest all-anime data
+    staleTime: 0,
   });
 }
 
@@ -288,99 +226,101 @@ export function usePopularAnime() {
   const { data: all = [] } = useAllAnime();
   return useQuery<Anime[]>({
     queryKey: ["anime", "popular"],
-    queryFn: async () =>
-      [...all].sort((a, b) => b.rating - a.rating).slice(0, 8),
+    queryFn: () => [...all].sort((a, b) => b.rating - a.rating).slice(0, 8),
     enabled: all.length > 0,
-    staleTime: 0, // Always reflect latest all-anime data
+    staleTime: 0,
   });
 }
 
-// ── Mutations ─────────────────────────────────────────────────────────────────
+// ── Live aliases (backward compat) ────────────────────────────────────────────
+
+export const useLiveAllAnime = useAllAnime;
+export const useLiveFeaturedAnime = useFeaturedAnime;
+export const useLiveAnimeDetail = useAnimeDetail;
+export const useLiveSearchAnime = useSearchAnime;
+export const useLiveAnimeByGenre = useAnimeByGenre;
+export const useLiveTrendingAnime = useTrendingAnime;
+export const useLiveLatestAnime = useLatestAnime;
+export const useLivePopularAnime = usePopularAnime;
+
+// ── Mutations (localStorage cache layer — backward compat) ────────────────────
+// NOTE: These mutations write to the localStorage cache only. They are kept
+// for backward compatibility with any page that uses them directly.
+// Pages that touch admin CRUD should use useAdminActions() instead, which
+// routes writes through the canister.
 
 export function useCreateAnime() {
-  const { actor, isFetching } = useActor(createActor);
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (data: AnimeFormData): Promise<Anime> => {
-      if (!actor || isFetching)
-        throw new Error("Backend is still loading — please wait and try again");
-      const input = toAnimeInput(data);
-      const result = await actor.createAnime(input);
-      const created = toAnime(result);
-      // Update localStorage cache immediately
-      const current = loadData<Anime[]>("anime_cache") ?? [];
-      saveData("anime_cache", [created, ...current]);
-      return created;
+      const newAnime: Anime = {
+        id: generateId(),
+        title: data.title.trim(),
+        description: data.description.trim(),
+        genre: data.genre,
+        rating: data.rating,
+        thumbnailUrl: data.thumbnailUrl.trim() || data.coverImageUrl.trim(),
+        coverImageUrl: data.coverImageUrl.trim() || data.thumbnailUrl.trim(),
+        isFeatured: data.isFeatured,
+        episodeCount: 0,
+        viewCount: 0,
+        releaseYear: data.releaseYear,
+        status: data.status,
+        createdAt: Date.now(),
+      };
+      upsertAnime(newAnime);
+      return newAnime;
     },
-    onSuccess: () => {
+    onSuccess: (created) => {
       queryClient.invalidateQueries({ queryKey: ["anime"] });
-      // Force immediate re-fetch so live page reflects new anime without waiting
-      queryClient.refetchQueries({ queryKey: ["anime"] });
+      queryClient.setQueryData<Anime[]>(["anime", "all"], (old) => {
+        const existing = old ?? getAnimeList();
+        if (existing.find((a) => a.id === created.id)) return existing;
+        return [...existing, created];
+      });
     },
   });
 }
 
 export function useUpdateAnime() {
-  const { actor, isFetching } = useActor(createActor);
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async ({
       id,
       data,
     }: { id: string; data: Partial<AnimeFormData> }): Promise<Anime> => {
-      if (!actor || isFetching)
-        throw new Error("Backend is still loading — please wait and try again");
-      // Fetch current to merge partial updates
-      const current = await actor.getAnime(id);
+      const current = getAnimeList().find((a) => a.id === id);
       if (!current) throw new Error("Anime not found");
-      const merged: AnimeFormData = {
-        title: data.title ?? current.title,
-        description: data.description ?? current.description,
-        genre: data.genre ?? current.genres ?? [],
+      const updated: Anime = {
+        ...current,
+        title: data.title?.trim() ?? current.title,
+        description: data.description?.trim() ?? current.description,
+        genre: data.genre ?? current.genre,
         rating: data.rating ?? current.rating,
-        thumbnailUrl: data.thumbnailUrl ?? current.coverImageUrl,
-        coverImageUrl: data.coverImageUrl ?? current.coverImageUrl,
+        thumbnailUrl: data.thumbnailUrl?.trim() ?? current.thumbnailUrl,
+        coverImageUrl: data.coverImageUrl?.trim() ?? current.coverImageUrl,
         isFeatured: data.isFeatured ?? current.isFeatured,
-        releaseYear: data.releaseYear ?? new Date().getFullYear(),
-        status: data.status ?? "ongoing",
+        releaseYear: data.releaseYear ?? current.releaseYear,
+        status: data.status ?? current.status,
       };
-      const result = await actor.updateAnime(id, toAnimeInput(merged));
-      if (!result) throw new Error("Update failed — anime may not exist");
-      const updated = toAnime(result);
-      // Update localStorage cache immediately
-      const cached = loadData<Anime[]>("anime_cache") ?? [];
-      const newCache = cached.map((a) => (a.id === id ? updated : a));
-      saveData("anime_cache", newCache);
+      upsertAnime(updated);
       return updated;
     },
-    onSuccess: () => {
+    onSuccess: (updated) => {
       queryClient.invalidateQueries({ queryKey: ["anime"] });
-      // Force immediate re-fetch so live page reflects updated anime
-      queryClient.refetchQueries({ queryKey: ["anime"] });
+      queryClient.invalidateQueries({ queryKey: ["anime", updated.id] });
     },
   });
 }
 
 export function useDeleteAnime() {
-  const { actor, isFetching } = useActor(createActor);
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (id: string): Promise<void> => {
-      if (!actor || isFetching)
-        throw new Error("Backend is still loading — please wait and try again");
-      const success = await actor.deleteAnime(id);
-      if (!success) throw new Error("Delete failed — anime may not exist");
-      // Update localStorage cache immediately
-      const cached = loadData<Anime[]>("anime_cache") ?? [];
-      saveData(
-        "anime_cache",
-        cached.filter((a) => a.id !== id),
-      );
+      removeAnime(id);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["anime"] });
-      // Force immediate re-fetch so live page reflects deletion
-      queryClient.refetchQueries({ queryKey: ["anime"] });
     },
   });
 }

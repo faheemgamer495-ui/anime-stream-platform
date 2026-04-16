@@ -19,7 +19,7 @@ import SeasonTypes "types/season";
 import SeasonLib "lib/season";
 import Common "types/common";
 import SeasonMixin "mixins/season-api";
-
+import GuestWatchlistMixin "mixins/guest-watchlist-api";
 
 
 
@@ -37,35 +37,58 @@ actor {
   stable var ratings : [CommentTypes.Rating] = [];
   stable var animeRequests : [RequestTypes.AnimeRequest] = [];
 
+  // Guest watchlist — text userId, no Principal/auth required
+  stable var guestWatchlist : [(Text, Text, Int)] = [];
+
   // ID counters — stable so they survive upgrades
   stable var nextAnimeId : Nat = 0;
   stable var nextEpisodeId : Nat = 0;
   stable var nextAdId : Nat = 0;
   stable var nextCommentId : Nat = 0;
 
-  // Seeded flag — stable so it is never reset after first seed
-  stable var seeded : Bool = false;
+  // Data version: bump this to trigger a re-seed of sample data.
+  // Version 0 = never seeded. Version 1 = first seed run.
+  // Keep legacy seeded flag for backward compatibility (ignored in logic).
+  stable var dataVersion : Nat = 0;
+  stable var seeded : Bool = false; // kept for upgrade compatibility only
 
-  // Only seed once — check seeded flag only, not array size
-  if (not seeded) {
+  // Seed once on first deployment (dataVersion == 0).
+  // Existing user-added data is never deleted — guards inside each seedSampleData
+  // check array sizes so they only populate truly empty stores.
+  if (dataVersion == 0) {
     let now = Time.now();
     let (newAnimes, animeCount) = AnimeLib.seedSampleData(animes, nextAnimeId, now);
     animes := newAnimes;
     nextAnimeId := animeCount;
+    // Seed seasons before episodes so season IDs are consistent
+    let (newSeasons, seasonCount) = SeasonLib.seedSampleData(seasons, nextSeasonId, now);
+    seasons := newSeasons;
+    nextSeasonId := seasonCount;
     let (newEpisodes, episodeCount) = EpisodeLib.seedSampleData(episodes, nextEpisodeId, now);
     episodes := newEpisodes;
     nextEpisodeId := episodeCount;
     let (newAds, adCount) = AdLib.seedSampleData(ads, nextAdId);
     ads := newAds;
     nextAdId := adCount;
+    dataVersion := 1;
     seeded := true;
   };
 
   // One-time migration: fix any seasons where seasonNumber == 0
   seasons := SeasonLib.migrateSeasonNumbers(seasons);
 
+  // Migration: ensure Naruto Season 1 Episode 1 uses the Google Drive embed URL.
+  // Delegated to EpisodeLib to avoid compiler codegen bug with nested closures in actor body.
+  // Runs on every canister init/upgrade — idempotent.
+  // Returns a record to allow field access without tuple-destructuring let at actor top level
+  // (tuple-destructuring let triggers M0133 in --default-persistent-actors mode).
+  let narutoMig = EpisodeLib.migrateNarutoEp1(episodes, nextEpisodeId, Time.now());
+  episodes := narutoMig.episodes;
+  nextEpisodeId := narutoMig.nextEpisodeId;
+
   include AiMixin();
   include SeasonMixin(seasons, episodes);
+  include GuestWatchlistMixin(guestWatchlist);
 
   // ── Seasons ────────────────────────────────────────────────────────────────
 
@@ -143,20 +166,23 @@ actor {
     AnimeLib.filterByGenre(animes, genre);
   };
 
-  public shared func createAnime(input : AnimeTypes.AnimeInput) : async AnimeTypes.AnimePublic {
+  public shared func createAnime(adminToken : Text, input : AnimeTypes.AnimeInput) : async AnimeTypes.AnimePublic {
+    if (adminToken != "adminfaheem123") Runtime.trap("Unauthorized");
     let (result, newAnimes) = AnimeLib.create(animes, nextAnimeId, input, Time.now());
     animes := newAnimes;
     nextAnimeId += 1;
     result;
   };
 
-  public shared func updateAnime(id : Text, input : AnimeTypes.AnimeInput) : async ?AnimeTypes.AnimePublic {
+  public shared func updateAnime(adminToken : Text, id : Text, input : AnimeTypes.AnimeInput) : async ?AnimeTypes.AnimePublic {
+    if (adminToken != "adminfaheem123") Runtime.trap("Unauthorized");
     let (result, newAnimes) = AnimeLib.update(animes, id, input);
     animes := newAnimes;
     result;
   };
 
-  public shared func deleteAnime(id : Text) : async Bool {
+  public shared func deleteAnime(adminToken : Text, id : Text) : async Bool {
+    if (adminToken != "adminfaheem123") Runtime.trap("Unauthorized");
     let (result, newAnimes) = AnimeLib.delete(animes, id);
     animes := newAnimes;
     result;

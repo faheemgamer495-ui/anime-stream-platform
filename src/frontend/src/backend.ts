@@ -214,13 +214,14 @@ export interface backendInterface {
     addComment(episodeId: string, text: string, parentId: string | null): Promise<Comment>;
     addRating(episodeId: string, stars: bigint): Promise<string | null>;
     addToWatchlist(animeId: string): Promise<void>;
+    addToWatchlistGuest(_userId: string, _animeId: string): Promise<void>;
     aiChat(userMessage: string, pageContext: string, errorContext: string): Promise<string>;
     createAdConfig(input: AdConfigInput): Promise<AdConfigPublic>;
-    createAnime(input: AnimeInput): Promise<AnimePublic>;
+    createAnime(adminToken: string, input: AnimeInput): Promise<AnimePublic>;
     createEpisode(adminToken: string, input: EpisodeInput): Promise<Episode>;
     createSeason(adminToken: string, input: SeasonInput): Promise<SeasonPublic>;
     deleteAdConfig(id: string): Promise<boolean>;
-    deleteAnime(id: string): Promise<boolean>;
+    deleteAnime(adminToken: string, id: string): Promise<boolean>;
     deleteAnimeRequest(id: string, adminToken: string): Promise<boolean>;
     deleteComment(commentId: string): Promise<boolean>;
     deleteEpisode(adminToken: string, id: string): Promise<boolean>;
@@ -230,6 +231,7 @@ export interface backendInterface {
     getAdsByPlacement(placement: AdPlacement): Promise<Array<AdConfigPublic>>;
     getAllAds(): Promise<Array<AdConfigPublic>>;
     getAllAnime(): Promise<Array<AnimePublic>>;
+    getAllEpisodes(): Promise<Array<Episode>>;
     getAnime(id: string): Promise<AnimePublic | null>;
     getAnimeRequests(adminToken: string): Promise<Array<AnimeRequest>>;
     getCommentsByEpisode(episodeId: string): Promise<Array<Comment>>;
@@ -238,6 +240,7 @@ export interface backendInterface {
     getEpisodesByAnime(animeId: string): Promise<Array<Episode>>;
     getEpisodesBySeason(seasonId: SeasonId): Promise<Array<Episode>>;
     getFeaturedAnime(): Promise<Array<AnimePublic>>;
+    getGuestWatchlist(_userId: string): Promise<Array<string>>;
     getRatingsInfo(episodeId: string): Promise<{
         total: bigint;
         average: number;
@@ -250,14 +253,16 @@ export interface backendInterface {
     incrementAnimeViewCount(id: string): Promise<void>;
     isAdminUser(): Promise<boolean>;
     isInWatchlist(animeId: string): Promise<boolean>;
+    isInWatchlistGuest(_userId: string, _animeId: string): Promise<boolean>;
     listAllUsers(): Promise<Array<UserPublic>>;
     markRequestComplete(id: string, adminToken: string): Promise<boolean>;
     registerUser(input: UserInput): Promise<UserPublic>;
     removeFromWatchlist(animeId: string): Promise<boolean>;
+    removeFromWatchlistGuest(_userId: string, _animeId: string): Promise<boolean>;
     searchAnime(term: string): Promise<Array<AnimePublic>>;
     submitAnimeRequest(requestText: string, username: string): Promise<string>;
     updateAdConfig(id: string, input: AdConfigInput): Promise<AdConfigPublic | null>;
-    updateAnime(id: string, input: AnimeInput): Promise<AnimePublic | null>;
+    updateAnime(adminToken: string, id: string, input: AnimeInput): Promise<AnimePublic | null>;
     updateEpisode(adminToken: string, id: string, input: EpisodeInput): Promise<Episode | null>;
     updateSeason(adminToken: string, id: SeasonId, input: SeasonInput): Promise<SeasonPublic | null>;
     updateUser(input: UserInput): Promise<UserPublic | null>;
@@ -307,6 +312,20 @@ export class Backend implements backendInterface {
             return result;
         }
     }
+    async addToWatchlistGuest(arg0: string, arg1: string): Promise<void> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.addToWatchlistGuest(arg0, arg1);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.addToWatchlistGuest(arg0, arg1);
+            return result;
+        }
+    }
     async aiChat(arg0: string, arg1: string, arg2: string): Promise<string> {
         if (this.processError) {
             try {
@@ -335,17 +354,17 @@ export class Backend implements backendInterface {
             return from_candid_AdConfigPublic_n12(this._uploadFile, this._downloadFile, result);
         }
     }
-    async createAnime(arg0: AnimeInput): Promise<AnimePublic> {
+    async createAnime(arg0: string, arg1: AnimeInput): Promise<AnimePublic> {
         if (this.processError) {
             try {
-                const result = await this.actor.createAnime(arg0);
+                const result = await this.actor.createAnime(arg0, arg1);
                 return result;
             } catch (e) {
                 this.processError(e);
                 throw new Error("unreachable");
             }
         } else {
-            const result = await this.actor.createAnime(arg0);
+            const result = await this.actor.createAnime(arg0, arg1);
             return result;
         }
     }
@@ -391,17 +410,17 @@ export class Backend implements backendInterface {
             return result;
         }
     }
-    async deleteAnime(arg0: string): Promise<boolean> {
+    async deleteAnime(arg0: string, arg1: string): Promise<boolean> {
         if (this.processError) {
             try {
-                const result = await this.actor.deleteAnime(arg0);
+                const result = await this.actor.deleteAnime(arg0, arg1);
                 return result;
             } catch (e) {
                 this.processError(e);
                 throw new Error("unreachable");
             }
         } else {
-            const result = await this.actor.deleteAnime(arg0);
+            const result = await this.actor.deleteAnime(arg0, arg1);
             return result;
         }
     }
@@ -531,18 +550,32 @@ export class Backend implements backendInterface {
             return result;
         }
     }
+    async getAllEpisodes(): Promise<Array<Episode>> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.getAllEpisodes();
+                return from_candid_vec_n25(this._uploadFile, this._downloadFile, result);
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.getAllEpisodes();
+            return from_candid_vec_n25(this._uploadFile, this._downloadFile, result);
+        }
+    }
     async getAnime(arg0: string): Promise<AnimePublic | null> {
         if (this.processError) {
             try {
                 const result = await this.actor.getAnime(arg0);
-                return from_candid_opt_n25(this._uploadFile, this._downloadFile, result);
+                return from_candid_opt_n26(this._uploadFile, this._downloadFile, result);
             } catch (e) {
                 this.processError(e);
                 throw new Error("unreachable");
             }
         } else {
             const result = await this.actor.getAnime(arg0);
-            return from_candid_opt_n25(this._uploadFile, this._downloadFile, result);
+            return from_candid_opt_n26(this._uploadFile, this._downloadFile, result);
         }
     }
     async getAnimeRequests(arg0: string): Promise<Array<AnimeRequest>> {
@@ -563,14 +596,14 @@ export class Backend implements backendInterface {
         if (this.processError) {
             try {
                 const result = await this.actor.getCommentsByEpisode(arg0);
-                return from_candid_vec_n26(this._uploadFile, this._downloadFile, result);
+                return from_candid_vec_n27(this._uploadFile, this._downloadFile, result);
             } catch (e) {
                 this.processError(e);
                 throw new Error("unreachable");
             }
         } else {
             const result = await this.actor.getCommentsByEpisode(arg0);
-            return from_candid_vec_n26(this._uploadFile, this._downloadFile, result);
+            return from_candid_vec_n27(this._uploadFile, this._downloadFile, result);
         }
     }
     async getEnabledAds(): Promise<Array<AdConfigPublic>> {
@@ -591,42 +624,42 @@ export class Backend implements backendInterface {
         if (this.processError) {
             try {
                 const result = await this.actor.getEpisode(arg0);
-                return from_candid_opt_n27(this._uploadFile, this._downloadFile, result);
+                return from_candid_opt_n28(this._uploadFile, this._downloadFile, result);
             } catch (e) {
                 this.processError(e);
                 throw new Error("unreachable");
             }
         } else {
             const result = await this.actor.getEpisode(arg0);
-            return from_candid_opt_n27(this._uploadFile, this._downloadFile, result);
+            return from_candid_opt_n28(this._uploadFile, this._downloadFile, result);
         }
     }
     async getEpisodesByAnime(arg0: string): Promise<Array<Episode>> {
         if (this.processError) {
             try {
                 const result = await this.actor.getEpisodesByAnime(arg0);
-                return from_candid_vec_n28(this._uploadFile, this._downloadFile, result);
+                return from_candid_vec_n25(this._uploadFile, this._downloadFile, result);
             } catch (e) {
                 this.processError(e);
                 throw new Error("unreachable");
             }
         } else {
             const result = await this.actor.getEpisodesByAnime(arg0);
-            return from_candid_vec_n28(this._uploadFile, this._downloadFile, result);
+            return from_candid_vec_n25(this._uploadFile, this._downloadFile, result);
         }
     }
     async getEpisodesBySeason(arg0: SeasonId): Promise<Array<Episode>> {
         if (this.processError) {
             try {
                 const result = await this.actor.getEpisodesBySeason(arg0);
-                return from_candid_vec_n28(this._uploadFile, this._downloadFile, result);
+                return from_candid_vec_n25(this._uploadFile, this._downloadFile, result);
             } catch (e) {
                 this.processError(e);
                 throw new Error("unreachable");
             }
         } else {
             const result = await this.actor.getEpisodesBySeason(arg0);
-            return from_candid_vec_n28(this._uploadFile, this._downloadFile, result);
+            return from_candid_vec_n25(this._uploadFile, this._downloadFile, result);
         }
     }
     async getFeaturedAnime(): Promise<Array<AnimePublic>> {
@@ -640,6 +673,20 @@ export class Backend implements backendInterface {
             }
         } else {
             const result = await this.actor.getFeaturedAnime();
+            return result;
+        }
+    }
+    async getGuestWatchlist(arg0: string): Promise<Array<string>> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.getGuestWatchlist(arg0);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.getGuestWatchlist(arg0);
             return result;
         }
     }
@@ -759,6 +806,20 @@ export class Backend implements backendInterface {
             return result;
         }
     }
+    async isInWatchlistGuest(arg0: string, arg1: string): Promise<boolean> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.isInWatchlistGuest(arg0, arg1);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.isInWatchlistGuest(arg0, arg1);
+            return result;
+        }
+    }
     async listAllUsers(): Promise<Array<UserPublic>> {
         if (this.processError) {
             try {
@@ -815,6 +876,20 @@ export class Backend implements backendInterface {
             return result;
         }
     }
+    async removeFromWatchlistGuest(arg0: string, arg1: string): Promise<boolean> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.removeFromWatchlistGuest(arg0, arg1);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.removeFromWatchlistGuest(arg0, arg1);
+            return result;
+        }
+    }
     async searchAnime(arg0: string): Promise<Array<AnimePublic>> {
         if (this.processError) {
             try {
@@ -857,32 +932,32 @@ export class Backend implements backendInterface {
             return from_candid_opt_n38(this._uploadFile, this._downloadFile, result);
         }
     }
-    async updateAnime(arg0: string, arg1: AnimeInput): Promise<AnimePublic | null> {
+    async updateAnime(arg0: string, arg1: string, arg2: AnimeInput): Promise<AnimePublic | null> {
         if (this.processError) {
             try {
-                const result = await this.actor.updateAnime(arg0, arg1);
-                return from_candid_opt_n25(this._uploadFile, this._downloadFile, result);
+                const result = await this.actor.updateAnime(arg0, arg1, arg2);
+                return from_candid_opt_n26(this._uploadFile, this._downloadFile, result);
             } catch (e) {
                 this.processError(e);
                 throw new Error("unreachable");
             }
         } else {
-            const result = await this.actor.updateAnime(arg0, arg1);
-            return from_candid_opt_n25(this._uploadFile, this._downloadFile, result);
+            const result = await this.actor.updateAnime(arg0, arg1, arg2);
+            return from_candid_opt_n26(this._uploadFile, this._downloadFile, result);
         }
     }
     async updateEpisode(arg0: string, arg1: string, arg2: EpisodeInput): Promise<Episode | null> {
         if (this.processError) {
             try {
                 const result = await this.actor.updateEpisode(arg0, arg1, to_candid_EpisodeInput_n18(this._uploadFile, this._downloadFile, arg2));
-                return from_candid_opt_n27(this._uploadFile, this._downloadFile, result);
+                return from_candid_opt_n28(this._uploadFile, this._downloadFile, result);
             } catch (e) {
                 this.processError(e);
                 throw new Error("unreachable");
             }
         } else {
             const result = await this.actor.updateEpisode(arg0, arg1, to_candid_EpisodeInput_n18(this._uploadFile, this._downloadFile, arg2));
-            return from_candid_opt_n27(this._uploadFile, this._downloadFile, result);
+            return from_candid_opt_n28(this._uploadFile, this._downloadFile, result);
         }
     }
     async updateSeason(arg0: string, arg1: SeasonId, arg2: SeasonInput): Promise<SeasonPublic | null> {
@@ -938,10 +1013,10 @@ function from_candid_opt_n22(_uploadFile: (file: ExternalBlob) => Promise<Uint8A
 function from_candid_opt_n23(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: [] | [_Comment]): Comment | null {
     return value.length === 0 ? null : from_candid_Comment_n2(_uploadFile, _downloadFile, value[0]);
 }
-function from_candid_opt_n25(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: [] | [_AnimePublic]): AnimePublic | null {
+function from_candid_opt_n26(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: [] | [_AnimePublic]): AnimePublic | null {
     return value.length === 0 ? null : value[0];
 }
-function from_candid_opt_n27(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: [] | [_Episode]): Episode | null {
+function from_candid_opt_n28(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: [] | [_Episode]): Episode | null {
     return value.length === 0 ? null : from_candid_Episode_n20(_uploadFile, _downloadFile, value[0]);
 }
 function from_candid_opt_n30(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: [] | [bigint]): bigint | null {
@@ -1118,11 +1193,11 @@ function from_candid_variant_n17(_uploadFile: (file: ExternalBlob) => Promise<Ui
 function from_candid_vec_n24(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: Array<_AdConfigPublic>): Array<AdConfigPublic> {
     return value.map((x)=>from_candid_AdConfigPublic_n12(_uploadFile, _downloadFile, x));
 }
-function from_candid_vec_n26(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: Array<_Comment>): Array<Comment> {
-    return value.map((x)=>from_candid_Comment_n2(_uploadFile, _downloadFile, x));
-}
-function from_candid_vec_n28(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: Array<_Episode>): Array<Episode> {
+function from_candid_vec_n25(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: Array<_Episode>): Array<Episode> {
     return value.map((x)=>from_candid_Episode_n20(_uploadFile, _downloadFile, x));
+}
+function from_candid_vec_n27(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: Array<_Comment>): Array<Comment> {
+    return value.map((x)=>from_candid_Comment_n2(_uploadFile, _downloadFile, x));
 }
 function from_candid_vec_n35(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: Array<_UserPublic>): Array<UserPublic> {
     return value.map((x)=>from_candid_UserPublic_n33(_uploadFile, _downloadFile, x));

@@ -6,536 +6,578 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Link, useNavigate } from "@tanstack/react-router";
 import {
   Bookmark,
-  Eye,
-  EyeOff,
-  KeyRound,
   LogOut,
   Menu,
+  Search,
   Shield,
   Tv2,
   User,
+  UserPlus,
   X,
 } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import {
+  type KeyboardEvent,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
+import { useAppContext } from "../context/AppContext";
 import { useAdminAuth } from "../hooks/useAdminAuth";
 import { useAuth } from "../hooks/useAuth";
+import { isPreviewMode } from "../lib/modeContext";
+import type { Anime } from "../types";
 import GenreFilter from "./GenreFilter";
-import SearchBar from "./SearchBar";
 
 interface NavBarProps {
   onGenreChange?: (genre: string | null) => void;
   activeGenre?: string | null;
 }
 
-type LoginTab = "user" | "admin";
+function useSearchDropdown() {
+  const { anime } = useAppContext();
+  const [query, setQuery] = useState("");
+  const [results, setResults] = useState<Anime[]>([]);
+  const [open, setOpen] = useState(false);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-function LoginModal({ onClose }: { onClose: () => void }) {
-  const { login, isLoggingIn: isIILoggingIn } = useAuth();
-  const {
-    loginWithCredentials,
-    isLoggingIn: isAdminLoggingIn,
-    error: adminError,
-  } = useAdminAuth();
-  const navigate = useNavigate();
-
-  const [tab, setTab] = useState<LoginTab>("user");
-  const [username, setUsername] = useState("");
-  const [password, setPassword] = useState("");
-  const [showPassword, setShowPassword] = useState(false);
-  const overlayRef = useRef<HTMLDivElement>(null);
-
-  // Close on Escape
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    document.addEventListener("keydown", handler);
-    return () => document.removeEventListener("keydown", handler);
-  }, [onClose]);
-
-  // Prevent body scroll
-  useEffect(() => {
-    document.body.style.overflow = "hidden";
-    return () => {
-      document.body.style.overflow = "";
-    };
-  }, []);
-
-  const handleAdminSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    await loginWithCredentials(username, password);
-    // If login succeeded (no error), adminError will be null from the hook
-    // We check after the call completes via a small effect
-  };
-
-  // Redirect to admin after successful admin login
-  const { isAdminLoggedIn } = useAdminAuth();
-  useEffect(() => {
-    if (isAdminLoggedIn) {
-      onClose();
-      navigate({ to: "/admin" });
-    }
-  }, [isAdminLoggedIn, navigate, onClose]);
-
-  const handleUserLogin = () => {
-    login();
-    onClose();
-  };
-
-  return (
-    <div
-      ref={overlayRef}
-      className="fixed inset-0 z-[100] flex items-center justify-center p-4"
-      style={{ background: "rgba(0,0,0,0.85)" }}
-      onClick={(e) => {
-        if (e.target === overlayRef.current) onClose();
-      }}
-      onKeyDown={(e) => {
-        if (e.key === "Escape" && e.target === overlayRef.current) onClose();
-      }}
-      data-ocid="login-modal-overlay"
-    >
-      <div
-        className="relative w-full max-w-sm rounded-xl border border-border bg-card shadow-2xl overflow-hidden"
-        style={{
-          animation: "modalSlideIn 0.22s cubic-bezier(0.4,0,0.2,1)",
-        }}
-        data-ocid="login-modal"
-      >
-        {/* Header */}
-        <div className="flex items-center justify-between px-6 pt-6 pb-4">
-          <div className="flex items-center gap-2">
-            <Tv2 className="w-5 h-5 text-primary" />
-            <span className="font-display font-bold text-lg text-foreground">
-              Anime<span className="text-primary">Stream</span>
-            </span>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-full p-1.5 text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors"
-            aria-label="Close login"
-            data-ocid="login-modal-close"
-          >
-            <X className="w-4 h-4" />
-          </button>
-        </div>
-
-        {/* Tabs */}
-        <div className="flex mx-6 mb-5 rounded-lg overflow-hidden border border-border">
-          <button
-            type="button"
-            className={`flex-1 py-2 text-sm font-medium transition-colors ${
-              tab === "user"
-                ? "bg-primary text-white"
-                : "bg-muted/30 text-muted-foreground hover:text-foreground"
-            }`}
-            onClick={() => setTab("user")}
-            data-ocid="login-tab-user"
-          >
-            <User className="w-3.5 h-3.5 inline mr-1.5 mb-0.5" />
-            User Login
-          </button>
-          <button
-            type="button"
-            className={`flex-1 py-2 text-sm font-medium transition-colors ${
-              tab === "admin"
-                ? "bg-primary text-white"
-                : "bg-muted/30 text-muted-foreground hover:text-foreground"
-            }`}
-            onClick={() => setTab("admin")}
-            data-ocid="login-tab-admin"
-          >
-            <Shield className="w-3.5 h-3.5 inline mr-1.5 mb-0.5" />
-            Admin Login
-          </button>
-        </div>
-
-        <div className="px-6 pb-6">
-          {/* User Login Tab */}
-          {tab === "user" && (
-            <div
-              className="flex flex-col items-center gap-4 py-2"
-              data-ocid="login-user-panel"
-            >
-              <div className="w-14 h-14 rounded-full bg-primary/10 border border-primary/30 flex items-center justify-center">
-                <User className="w-7 h-7 text-primary" />
-              </div>
-              <div className="text-center">
-                <p className="text-foreground font-medium mb-1">
-                  Sign in with Internet Identity
-                </p>
-                <p className="text-xs text-muted-foreground leading-relaxed">
-                  Use your Internet Identity to securely log in. Your watchlist
-                  and preferences will sync automatically.
-                </p>
-              </div>
-              <Button
-                onClick={handleUserLogin}
-                disabled={isIILoggingIn}
-                className="w-full bg-primary hover:bg-primary/90 text-white font-semibold"
-                data-ocid="login-ii-btn"
-              >
-                {isIILoggingIn ? (
-                  <span className="flex items-center gap-2">
-                    <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                    Connecting...
-                  </span>
-                ) : (
-                  <>
-                    <KeyRound className="w-4 h-4 mr-2" />
-                    Continue with Internet Identity
-                  </>
-                )}
-              </Button>
-            </div>
-          )}
-
-          {/* Admin Login Tab */}
-          {tab === "admin" && (
-            <form
-              onSubmit={handleAdminSubmit}
-              className="flex flex-col gap-4"
-              data-ocid="login-admin-panel"
-            >
-              <div className="flex flex-col items-center gap-2 pb-1">
-                <div className="w-14 h-14 rounded-full bg-primary/10 border border-primary/30 flex items-center justify-center">
-                  <Shield className="w-7 h-7 text-primary" />
-                </div>
-                <p className="text-xs text-muted-foreground text-center">
-                  Admin access only. Enter your credentials below.
-                </p>
-              </div>
-
-              {adminError && (
-                <div
-                  className="rounded-lg px-3 py-2.5 text-sm text-white font-medium"
-                  style={{ background: "#E50914" }}
-                  data-ocid="login-admin-error"
-                >
-                  {adminError}
-                </div>
-              )}
-
-              <div className="space-y-1.5">
-                <Label
-                  htmlFor="admin-username"
-                  className="text-xs text-muted-foreground uppercase tracking-wide"
-                >
-                  Username
-                </Label>
-                <Input
-                  id="admin-username"
-                  type="text"
-                  autoComplete="username"
-                  value={username}
-                  onChange={(e) => setUsername(e.target.value)}
-                  placeholder="Admin username"
-                  className="bg-muted/40 border-border focus:border-primary"
-                  required
-                  data-ocid="login-admin-username"
-                />
-              </div>
-
-              <div className="space-y-1.5">
-                <Label
-                  htmlFor="admin-password"
-                  className="text-xs text-muted-foreground uppercase tracking-wide"
-                >
-                  Password
-                </Label>
-                <div className="relative">
-                  <Input
-                    id="admin-password"
-                    type={showPassword ? "text" : "password"}
-                    autoComplete="current-password"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    placeholder="Admin password"
-                    className="bg-muted/40 border-border focus:border-primary pr-10"
-                    required
-                    data-ocid="login-admin-password"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword((v) => !v)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
-                    tabIndex={-1}
-                    aria-label={
-                      showPassword ? "Hide password" : "Show password"
-                    }
-                  >
-                    {showPassword ? (
-                      <EyeOff className="w-4 h-4" />
-                    ) : (
-                      <Eye className="w-4 h-4" />
-                    )}
-                  </button>
-                </div>
-              </div>
-
-              <Button
-                type="submit"
-                disabled={isAdminLoggingIn || !username || !password}
-                className="w-full bg-primary hover:bg-primary/90 text-white font-semibold mt-1"
-                data-ocid="login-admin-submit"
-              >
-                {isAdminLoggingIn ? (
-                  <span className="flex items-center gap-2">
-                    <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                    Logging in...
-                  </span>
-                ) : (
-                  <>
-                    <Shield className="w-4 h-4 mr-2" />
-                    Login as Admin
-                  </>
-                )}
-              </Button>
-            </form>
-          )}
-        </div>
-      </div>
-
-      <style>{`
-        @keyframes modalSlideIn {
-          from { opacity: 0; transform: translateY(-16px) scale(0.97); }
-          to   { opacity: 1; transform: translateY(0)    scale(1);    }
-        }
-      `}</style>
-    </div>
+  const search = useCallback(
+    (q: string) => {
+      setQuery(q);
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+      if (!q.trim()) {
+        setResults([]);
+        setOpen(false);
+        return;
+      }
+      debounceRef.current = setTimeout(() => {
+        const lower = q.toLowerCase();
+        const found = anime
+          .filter(
+            (a) =>
+              a.title.toLowerCase().includes(lower) ||
+              a.genres.some((g) => g.toLowerCase().includes(lower)),
+          )
+          .slice(0, 8)
+          .map((a) => ({
+            id: a.id,
+            title: a.title,
+            genre: a.genres,
+            rating: a.rating,
+            thumbnailUrl: a.coverImageUrl,
+            coverImageUrl: a.coverImageUrl,
+            isFeatured: a.isFeatured,
+            episodeCount: 0,
+            viewCount: Number(a.viewCount),
+            releaseYear: new Date().getFullYear(),
+            status: "ongoing" as const,
+            description: a.description,
+            createdAt: Date.now(),
+          }));
+        setResults(found);
+        setOpen(found.length > 0);
+      }, 300);
+    },
+    [anime],
   );
+
+  const clear = () => {
+    setQuery("");
+    setResults([]);
+    setOpen(false);
+  };
+
+  return { query, search, results, open, setOpen, clear };
 }
 
 export default function NavBar({ onGenreChange, activeGenre }: NavBarProps) {
-  const { isLoggedIn, logout, principalId } = useAuth();
+  const { isLoggedIn, user, logout } = useAuth();
   const { isAdminLoggedIn, logout: adminLogout } = useAdminAuth();
   const [mobileOpen, setMobileOpen] = useState(false);
-  const [loginOpen, setLoginOpen] = useState(false);
+  const [mobileSearch, setMobileSearch] = useState(false);
+  const navigate = useNavigate();
+  const inPreview = isPreviewMode();
+  const searchRef = useRef<HTMLDivElement>(null);
+  const { query, search, results, open, setOpen, clear } = useSearchDropdown();
+
+  // Close dropdown on outside click
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (searchRef.current && !searchRef.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, [setOpen]);
+
+  const handleAdminLogout = () => {
+    adminLogout();
+    setMobileOpen(false);
+    void navigate({ to: "/preview/login" });
+  };
+
+  const handleUserLogout = () => {
+    logout();
+    setMobileOpen(false);
+    void navigate({ to: "/" });
+  };
+
+  const handleResultClick = (animeId: string) => {
+    clear();
+    setMobileOpen(false);
+    setMobileSearch(false);
+    void navigate({ to: "/anime/$id", params: { id: animeId } });
+  };
+
+  const handleKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Escape") {
+      clear();
+    }
+  };
 
   return (
-    <>
-      <header
-        className="sticky top-0 z-50 bg-card/95 backdrop-blur-sm border-b border-border"
-        data-ocid="navbar"
-      >
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center gap-4 h-16">
-            {/* Logo */}
-            <Link
-              to="/"
-              className="flex items-center gap-2 shrink-0"
-              data-ocid="nav-logo"
-            >
-              <Tv2 className="w-7 h-7 text-primary" />
-              <span className="font-display font-bold text-xl text-foreground hidden sm:block">
-                Anime<span className="text-primary">Stream</span>
-              </span>
-            </Link>
+    <header
+      className="sticky top-0 z-50 bg-card/95 backdrop-blur-md border-b border-border shadow-subtle"
+      data-ocid="navbar"
+    >
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="flex items-center gap-4 h-16">
+          {/* Logo */}
+          <Link
+            to={inPreview ? "/preview/admin" : "/"}
+            className="flex items-center gap-2 shrink-0"
+            data-ocid="nav-logo"
+          >
+            <Tv2 className="w-7 h-7 text-primary" />
+            <span className="font-display font-bold text-xl text-foreground hidden sm:block">
+              Anime<span className="text-primary">Stream</span>
+            </span>
+          </Link>
 
-            {/* Search */}
-            <div className="flex-1 max-w-xl hidden md:block">
-              <SearchBar />
+          {/* Search (live only, desktop) */}
+          {!inPreview && (
+            <div className="flex-1 max-w-md hidden md:block" ref={searchRef}>
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
+                <input
+                  type="text"
+                  value={query}
+                  onChange={(e) => search(e.target.value)}
+                  onKeyDown={handleKeyDown}
+                  onFocus={() => query && setOpen(results.length > 0)}
+                  placeholder="Search anime..."
+                  className="w-full h-9 pl-9 pr-9 bg-secondary/50 border border-input rounded-md text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring focus:border-ring transition-colors"
+                  data-ocid="nav-search-input"
+                />
+                {query && (
+                  <button
+                    type="button"
+                    onClick={clear}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                    aria-label="Clear search"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
+
+                {/* Dropdown */}
+                {open && (
+                  <div className="absolute top-full mt-1 left-0 right-0 bg-popover border border-border rounded-md shadow-lg overflow-hidden z-50">
+                    {results.map((anime) => (
+                      <button
+                        key={anime.id}
+                        type="button"
+                        onClick={() => handleResultClick(anime.id)}
+                        className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-secondary/60 transition-colors text-left"
+                        data-ocid={`search-result-${anime.id}`}
+                      >
+                        <img
+                          src={
+                            anime.thumbnailUrl ||
+                            "/assets/generated/hero-banner.dim_1920x800.jpg"
+                          }
+                          alt={anime.title}
+                          className="w-8 h-10 object-cover rounded shrink-0 bg-muted"
+                        />
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm font-medium text-foreground truncate">
+                            {anime.title}
+                          </p>
+                          <p className="text-xs text-muted-foreground truncate">
+                            {anime.genre.slice(0, 2).join(" · ")}
+                          </p>
+                        </div>
+                        <span className="text-xs text-muted-foreground shrink-0">
+                          ★ {anime.rating.toFixed(1)}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
+          )}
 
-            {/* Genre filter */}
+          {/* Genre filter (live only, large screens) */}
+          {!inPreview && (
             <div className="hidden lg:block shrink-0">
               <GenreFilter
                 activeGenre={activeGenre ?? null}
                 onGenreChange={onGenreChange ?? (() => {})}
               />
             </div>
+          )}
 
-            <div className="flex-1 md:flex-none" />
+          <div className="flex-1 md:flex-none" />
 
-            {/* Desktop Actions */}
-            <div className="hidden md:flex items-center gap-3">
-              {isAdminLoggedIn && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  asChild
-                  className="border-primary/50 text-primary hover:bg-primary/10"
-                >
-                  <Link to="/admin" data-ocid="nav-admin">
-                    <Shield className="w-4 h-4 mr-1.5" />
-                    Admin
-                  </Link>
-                </Button>
-              )}
-
-              <Button
-                variant="ghost"
-                size="sm"
-                asChild
-                className="gap-1.5"
-                data-ocid="nav-watchlist"
-              >
-                <Link to="/watchlist">
-                  <Bookmark className="w-4 h-4" />
-                  <span className="hidden lg:inline">Watchlist</span>
-                </Link>
-              </Button>
-
-              {isLoggedIn ? (
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="gap-2"
-                      data-ocid="nav-user-menu"
-                    >
-                      <User className="w-4 h-4" />
-                      <span className="hidden lg:inline max-w-20 truncate text-xs">
-                        {principalId?.slice(0, 8)}...
-                      </span>
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent
-                    align="end"
-                    className="bg-card border-border"
-                  >
-                    <DropdownMenuItem asChild>
-                      <Link to="/watchlist" className="cursor-pointer">
-                        <Bookmark className="w-4 h-4 mr-2" />
-                        My Watchlist
-                      </Link>
-                    </DropdownMenuItem>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem
-                      onClick={logout}
-                      className="text-destructive focus:text-destructive cursor-pointer"
-                      data-ocid="nav-logout"
-                    >
-                      <LogOut className="w-4 h-4 mr-2" />
-                      Sign Out
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              ) : (
-                <Button
-                  variant="default"
-                  size="sm"
-                  onClick={() => setLoginOpen(true)}
-                  className="bg-primary hover:bg-primary/90 gap-1.5"
-                  data-ocid="nav-login-btn"
-                >
-                  <KeyRound className="w-4 h-4" />
-                  Login
-                </Button>
-              )}
-
-              {/* Admin logout button when admin is logged in but user is not */}
-              {isAdminLoggedIn && !isLoggedIn && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={adminLogout}
-                  className="text-muted-foreground hover:text-foreground gap-1.5"
-                  data-ocid="nav-admin-logout"
-                >
-                  <LogOut className="w-4 h-4" />
-                </Button>
-              )}
-            </div>
-
-            {/* Mobile menu toggle */}
+          {/* Mobile search toggle (live only) */}
+          {!inPreview && (
             <Button
               variant="ghost"
               size="sm"
               className="md:hidden"
-              onClick={() => setMobileOpen((v) => !v)}
-              aria-label="Toggle menu"
+              onClick={() => {
+                setMobileSearch((v) => !v);
+                setMobileOpen(false);
+              }}
+              aria-label="Toggle search"
+              data-ocid="nav-mobile-search-toggle"
             >
-              {mobileOpen ? (
-                <X className="w-5 h-5" />
-              ) : (
-                <Menu className="w-5 h-5" />
-              )}
+              <Search className="w-5 h-5" />
             </Button>
-          </div>
-        </div>
+          )}
 
-        {/* Mobile dropdown */}
-        {mobileOpen && (
-          <div className="md:hidden bg-card border-t border-border px-4 py-4 flex flex-col gap-3 animate-slide-up">
-            <SearchBar />
-            <div className="flex flex-wrap gap-2">
-              {isAdminLoggedIn && (
+          {/* Desktop actions */}
+          <div className="hidden md:flex items-center gap-3">
+            {/* Preview mode */}
+            {inPreview ? (
+              isAdminLoggedIn ? (
+                <>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    asChild
+                    className="border-primary/50 text-primary hover:bg-primary/10"
+                    data-ocid="nav-admin-panel"
+                  >
+                    <Link to="/preview/admin">
+                      <Shield className="w-4 h-4 mr-1.5" />
+                      Admin Panel
+                    </Link>
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={handleAdminLogout}
+                    className="text-muted-foreground hover:text-foreground gap-1.5"
+                    data-ocid="nav-admin-logout"
+                  >
+                    <LogOut className="w-4 h-4" />
+                    <span className="hidden lg:inline">Admin Logout</span>
+                  </Button>
+                </>
+              ) : (
                 <Button
-                  variant="outline"
+                  variant="default"
                   size="sm"
                   asChild
-                  className="border-primary/50 text-primary"
+                  className="bg-primary hover:bg-primary/90 gap-1.5"
+                  data-ocid="nav-admin-login"
                 >
-                  <Link to="/admin" onClick={() => setMobileOpen(false)}>
-                    <Shield className="w-4 h-4 mr-1.5" />
-                    Admin
+                  <Link to="/preview/login">
+                    <Shield className="w-4 h-4 mr-1" />
+                    Admin Login
                   </Link>
                 </Button>
-              )}
-              <Button variant="ghost" size="sm" asChild>
-                <Link to="/watchlist" onClick={() => setMobileOpen(false)}>
-                  <Bookmark className="w-4 h-4 mr-1.5" />
-                  Watchlist
-                </Link>
-              </Button>
-              {isLoggedIn ? (
+              )
+            ) : (
+              /* Live mode */
+              <>
+                {isLoggedIn ? (
+                  <>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      asChild
+                      className="gap-1.5"
+                      data-ocid="nav-watchlist"
+                    >
+                      <Link to="/watchlist">
+                        <Bookmark className="w-4 h-4" />
+                        <span className="hidden lg:inline">Watchlist</span>
+                      </Link>
+                    </Button>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="gap-2"
+                          data-ocid="nav-user-menu"
+                        >
+                          <User className="w-4 h-4" />
+                          <span className="hidden lg:inline max-w-24 truncate text-xs">
+                            {user?.username}
+                          </span>
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent
+                        align="end"
+                        className="bg-card border-border"
+                      >
+                        <DropdownMenuItem asChild>
+                          <Link to="/watchlist" className="cursor-pointer">
+                            <Bookmark className="w-4 h-4 mr-2" />
+                            My Watchlist
+                          </Link>
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem
+                          onClick={handleUserLogout}
+                          className="text-destructive focus:text-destructive cursor-pointer"
+                          data-ocid="nav-logout"
+                        >
+                          <LogOut className="w-4 h-4 mr-2" />
+                          Sign Out
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </>
+                ) : (
+                  <>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      asChild
+                      className="gap-1.5"
+                      data-ocid="nav-login-btn"
+                    >
+                      <Link to="/login">
+                        <User className="w-4 h-4" />
+                        Login
+                      </Link>
+                    </Button>
+                    <Button
+                      variant="default"
+                      size="sm"
+                      asChild
+                      className="bg-primary hover:bg-primary/90 gap-1.5"
+                      data-ocid="nav-signup-btn"
+                    >
+                      <Link to="/login" search={{ mode: "signup" }}>
+                        <UserPlus className="w-4 h-4" />
+                        Sign Up
+                      </Link>
+                    </Button>
+                  </>
+                )}
+              </>
+            )}
+          </div>
+
+          {/* Mobile hamburger */}
+          <Button
+            variant="ghost"
+            size="sm"
+            className="md:hidden"
+            onClick={() => {
+              setMobileOpen((v) => !v);
+              setMobileSearch(false);
+            }}
+            aria-label="Toggle menu"
+            data-ocid="nav-mobile-menu-toggle"
+          >
+            {mobileOpen ? (
+              <X className="w-5 h-5" />
+            ) : (
+              <Menu className="w-5 h-5" />
+            )}
+          </Button>
+        </div>
+      </div>
+
+      {/* Mobile search bar */}
+      {mobileSearch && !inPreview && (
+        <div
+          className="md:hidden bg-card border-t border-border px-4 py-3"
+          ref={searchRef}
+        >
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
+            <input
+              type="text"
+              value={query}
+              onChange={(e) => search(e.target.value)}
+              onKeyDown={handleKeyDown}
+              placeholder="Search anime..."
+              ref={(el) => el?.focus()}
+              className="w-full h-9 pl-9 pr-9 bg-secondary/50 border border-input rounded-md text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+              data-ocid="nav-mobile-search-input"
+            />
+            {query && (
+              <button
+                type="button"
+                onClick={clear}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
+          {open && (
+            <div className="mt-1 bg-popover border border-border rounded-md overflow-hidden">
+              {results.map((anime) => (
+                <button
+                  key={anime.id}
+                  type="button"
+                  onClick={() => handleResultClick(anime.id)}
+                  className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-secondary/60 transition-colors text-left"
+                >
+                  <img
+                    src={
+                      anime.thumbnailUrl ||
+                      "/assets/generated/hero-banner.dim_1920x800.jpg"
+                    }
+                    alt={anime.title}
+                    className="w-8 h-10 object-cover rounded shrink-0 bg-muted"
+                  />
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-medium text-foreground truncate">
+                      {anime.title}
+                    </p>
+                    <p className="text-xs text-muted-foreground truncate">
+                      {anime.genre.slice(0, 2).join(" · ")}
+                    </p>
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Mobile dropdown menu */}
+      {mobileOpen && (
+        <div className="md:hidden bg-card border-t border-border px-4 py-4 flex flex-col gap-3">
+          {/* Genre filter on mobile */}
+          {!inPreview && (
+            <div className="overflow-x-auto">
+              <GenreFilter
+                activeGenre={activeGenre ?? null}
+                onGenreChange={(g) => {
+                  onGenreChange?.(g);
+                  setMobileOpen(false);
+                }}
+              />
+            </div>
+          )}
+
+          <div className="flex flex-wrap gap-2">
+            {/* Preview mobile */}
+            {inPreview ? (
+              isAdminLoggedIn ? (
+                <>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    asChild
+                    className="border-primary/50 text-primary"
+                  >
+                    <Link
+                      to="/preview/admin"
+                      onClick={() => setMobileOpen(false)}
+                    >
+                      <Shield className="w-4 h-4 mr-1.5" />
+                      Admin Panel
+                    </Link>
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={handleAdminLogout}
+                    className="text-muted-foreground"
+                    data-ocid="mobile-admin-logout"
+                  >
+                    <LogOut className="w-4 h-4 mr-1.5" />
+                    Admin Logout
+                  </Button>
+                </>
+              ) : (
+                <Button
+                  variant="default"
+                  size="sm"
+                  asChild
+                  className="bg-primary hover:bg-primary/90"
+                >
+                  <Link
+                    to="/preview/login"
+                    onClick={() => setMobileOpen(false)}
+                  >
+                    <Shield className="w-4 h-4 mr-1.5" />
+                    Admin Login
+                  </Link>
+                </Button>
+              )
+            ) : isLoggedIn ? (
+              <>
+                <Button variant="ghost" size="sm" asChild>
+                  <Link to="/watchlist" onClick={() => setMobileOpen(false)}>
+                    <Bookmark className="w-4 h-4 mr-1.5" />
+                    Watchlist
+                  </Link>
+                </Button>
                 <Button
                   variant="ghost"
                   size="sm"
-                  onClick={() => {
-                    logout();
-                    setMobileOpen(false);
-                  }}
+                  onClick={handleUserLogout}
                   data-ocid="mobile-logout"
                 >
                   <LogOut className="w-4 h-4 mr-1.5" />
                   Sign Out
                 </Button>
-              ) : (
+              </>
+            ) : (
+              <>
+                <Button variant="ghost" size="sm" asChild>
+                  <Link to="/login" onClick={() => setMobileOpen(false)}>
+                    <User className="w-4 h-4 mr-1.5" />
+                    User Login
+                  </Link>
+                </Button>
+                <Button variant="ghost" size="sm" asChild>
+                  <Link
+                    to="/preview/login"
+                    onClick={() => setMobileOpen(false)}
+                  >
+                    <Shield className="w-4 h-4 mr-1.5" />
+                    Admin Login
+                  </Link>
+                </Button>
                 <Button
                   variant="default"
                   size="sm"
-                  onClick={() => {
-                    setMobileOpen(false);
-                    setLoginOpen(true);
-                  }}
-                  className="bg-primary hover:bg-primary/90 gap-1.5"
-                  data-ocid="mobile-login-btn"
+                  asChild
+                  className="bg-primary hover:bg-primary/90"
+                  data-ocid="mobile-signup-btn"
                 >
-                  <KeyRound className="w-4 h-4" />
-                  Login
+                  <Link
+                    to="/login"
+                    search={{ mode: "signup" }}
+                    onClick={() => setMobileOpen(false)}
+                  >
+                    <UserPlus className="w-4 h-4 mr-1.5" />
+                    Sign Up
+                  </Link>
                 </Button>
-              )}
-              {isAdminLoggedIn && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => {
-                    adminLogout();
-                    setMobileOpen(false);
-                  }}
-                  className="text-muted-foreground"
-                  data-ocid="mobile-admin-logout"
-                >
-                  <LogOut className="w-4 h-4 mr-1.5" />
-                  Admin Logout
-                </Button>
-              )}
-            </div>
+              </>
+            )}
           </div>
-        )}
-      </header>
-
-      {/* Login Modal */}
-      {loginOpen && <LoginModal onClose={() => setLoginOpen(false)} />}
-    </>
+        </div>
+      )}
+    </header>
   );
 }

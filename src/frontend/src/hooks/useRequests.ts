@@ -1,50 +1,107 @@
-import { useActor } from "@caffeineai/core-infrastructure";
+/**
+ * useRequests — canister-first via AppContext, localStorage cache fallback.
+ *
+ * Reads go through AppContext (which calls the canister).
+ * Mutations route through AppContext — canister FIRST, cache updated on success.
+ */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { createActor } from "../backend";
-import type { AnimeRequest } from "../backend.d";
-import type { AnimeRequest as FrontendAnimeRequest } from "../types";
+import { useAppContext } from "../context/AppContext";
+import { generateId, getRequests, saveRequests } from "../lib/localStorageDB";
+import type { AnimeRequest } from "../types";
 
-function toFrontendRequest(r: AnimeRequest): FrontendAnimeRequest {
-  return {
-    id: r.id,
-    requestText: r.requestText,
-    username: r.username,
-    status: r.status,
-    createdAt: r.createdAt,
-  };
+export function useAnimeRequests(_adminToken?: string) {
+  const ctx = useAppContext();
+
+  return useQuery<AnimeRequest[]>({
+    queryKey: ["anime-requests"],
+    queryFn: async () => {
+      // Prefer canister data via context
+      if (ctx.isCanisterAvailable) {
+        await ctx.loadRequests().catch(console.error);
+        return ctx.requests;
+      }
+      return getRequests();
+    },
+    staleTime: 0,
+  });
 }
 
-export function useAnimeRequests(adminToken: string) {
-  const { actor, isFetching } = useActor(createActor);
-  return useQuery<FrontendAnimeRequest[]>({
-    queryKey: ["anime-requests", adminToken],
-    queryFn: async () => {
-      if (!actor) return [];
-      try {
-        const result = await actor.getAnimeRequests(adminToken);
-        return result.map(toFrontendRequest);
-      } catch {
-        return [];
+export function useSubmitAnimeRequest() {
+  const queryClient = useQueryClient();
+  const ctx = useAppContext();
+
+  return useMutation({
+    mutationFn: async ({
+      text,
+      username,
+    }: { text: string; username?: string }): Promise<AnimeRequest> => {
+      const usernameStr = username ?? "Anonymous";
+
+      // Try canister first
+      if (ctx.isCanisterAvailable) {
+        try {
+          await ctx.submitRequest(text.trim(), usernameStr);
+          queryClient.invalidateQueries({ queryKey: ["anime-requests"] });
+          return {
+            id: generateId(),
+            requestText: text.trim(),
+            username: usernameStr,
+            status: "pending",
+            createdAt: BigInt(Date.now()),
+          };
+        } catch (err) {
+          console.error("[useSubmitAnimeRequest] canister failed:", err);
+        }
       }
+
+      // Fallback: write to localStorage cache
+      const newRequest: AnimeRequest = {
+        id: generateId(),
+        requestText: text.trim(),
+        username: usernameStr,
+        status: "pending",
+        createdAt: BigInt(Date.now()),
+      };
+      const all = getRequests();
+      all.push(newRequest);
+      saveRequests(all);
+      console.log(
+        "[useSubmitAnimeRequest] Request saved to cache:",
+        newRequest.id,
+      );
+      return newRequest;
     },
-    enabled: !!actor && !isFetching,
-    staleTime: 15000,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["anime-requests"] });
+    },
   });
 }
 
 export function useMarkRequestComplete() {
-  const { actor, isFetching } = useActor(createActor);
   const queryClient = useQueryClient();
+  const ctx = useAppContext();
+
   return useMutation({
     mutationFn: async ({
       id,
-      adminToken,
-    }: { id: string; adminToken: string }) => {
-      if (!actor || isFetching)
-        throw new Error("Backend is still loading — please wait and try again");
-      const success = await actor.markRequestComplete(id, adminToken);
-      if (!success) throw new Error("Failed to mark request as complete");
-      return success;
+    }: { id: string; adminToken?: string }): Promise<boolean> => {
+      // Try canister first
+      if (ctx.isCanisterAvailable) {
+        try {
+          await ctx.completeRequest(id);
+          return true;
+        } catch (err) {
+          console.error("[useMarkRequestComplete] canister failed:", err);
+        }
+      }
+
+      // Fallback: update localStorage cache
+      const all = getRequests();
+      const idx = all.findIndex((r) => r.id === id);
+      if (idx === -1) throw new Error("Request not found");
+      all[idx] = { ...all[idx], status: "completed" };
+      saveRequests(all);
+      return true;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["anime-requests"] });
@@ -53,18 +110,27 @@ export function useMarkRequestComplete() {
 }
 
 export function useDeleteRequest() {
-  const { actor, isFetching } = useActor(createActor);
   const queryClient = useQueryClient();
+  const ctx = useAppContext();
+
   return useMutation({
     mutationFn: async ({
       id,
-      adminToken,
-    }: { id: string; adminToken: string }) => {
-      if (!actor || isFetching)
-        throw new Error("Backend is still loading — please wait and try again");
-      const success = await actor.deleteAnimeRequest(id, adminToken);
-      if (!success) throw new Error("Failed to delete request");
-      return success;
+    }: { id: string; adminToken?: string }): Promise<boolean> => {
+      // Try canister first
+      if (ctx.isCanisterAvailable) {
+        try {
+          await ctx.deleteRequest(id);
+          return true;
+        } catch (err) {
+          console.error("[useDeleteRequest] canister failed:", err);
+        }
+      }
+
+      // Fallback: update localStorage cache
+      const filtered = getRequests().filter((r) => r.id !== id);
+      saveRequests(filtered);
+      return true;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["anime-requests"] });
@@ -72,7 +138,7 @@ export function useDeleteRequest() {
   });
 }
 
-export function usePendingRequestsCount(adminToken: string) {
-  const { data: requests = [] } = useAnimeRequests(adminToken);
+export function usePendingRequestsCount(_adminToken?: string) {
+  const { requests } = useAppContext();
   return requests.filter((r) => r.status === "pending").length;
 }

@@ -24,7 +24,7 @@ export default function GenreFilter({
 }: GenreFilterProps) {
   return (
     <div
-      className="flex items-center gap-1.5 overflow-x-auto scrollbar-hide"
+      className="flex items-center gap-1.5 overflow-x-auto"
       style={{ scrollbarWidth: "none" }}
       data-ocid="genre-filter"
     >
@@ -36,12 +36,13 @@ export default function GenreFilter({
             key={genre}
             onClick={() => onGenreChange(genre === "All" ? null : genre)}
             className={[
-              "shrink-0 px-3 py-1 rounded-full text-xs font-medium transition-all duration-200",
+              "shrink-0 px-3 py-1.5 rounded-full text-xs font-medium transition-all duration-200 outline-none focus-visible:ring-2 focus-visible:ring-ring",
               isActive
-                ? "bg-primary text-white shadow-accent-glow"
+                ? "bg-primary text-white glow-accent shadow-sm"
                 : "bg-secondary/50 text-muted-foreground hover:bg-secondary hover:text-foreground",
             ].join(" ")}
-            data-ocid={`genre-${genre.toLowerCase()}`}
+            data-ocid={`genre-${genre.toLowerCase().replace(/[^a-z0-9]/g, "-")}`}
+            aria-pressed={isActive}
           >
             {genre}
           </button>

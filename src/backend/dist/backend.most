@@ -92,7 +92,10 @@ actor {
   stable var animeRequests : [AnimeRequest__85111995];
   stable var animes : [Anime__240298088];
   stable var comments : [Comment__804484252];
+  stable var dataVersion : Nat;
   stable var episodes : [Episode__747196338];
+  stable var guestWatchlist : [(Text, Text, Int)];
+  stable narutoMig : {episodes : [Episode__747196338]; nextEpisodeId : Nat};
   stable var nextAdId : Nat;
   stable var nextAnimeId : Nat;
   stable var nextCommentId : Nat;

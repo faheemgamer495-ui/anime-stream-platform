@@ -2,6 +2,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Link } from "@tanstack/react-router";
 import { Check, Play, Plus, Star } from "lucide-react";
+import { useState } from "react";
 import type { Anime } from "../types";
 
 interface AnimeCardProps {
@@ -11,12 +12,17 @@ interface AnimeCardProps {
   compact?: boolean;
 }
 
+const FALLBACK_IMG =
+  "https://images.unsplash.com/photo-1578632767115-351597cf2477?w=400&h=600&fit=crop";
+
 export default function AnimeCard({
   anime,
   onWatchlistToggle,
   isInWatchlist,
   compact,
 }: AnimeCardProps) {
+  const [imgError, setImgError] = useState(false);
+
   return (
     <div
       className="group relative bg-card rounded-lg overflow-hidden cursor-pointer scale-hover"
@@ -26,17 +32,23 @@ export default function AnimeCard({
         {/* Thumbnail */}
         <div className="relative aspect-[2/3] overflow-hidden bg-muted">
           <img
-            src={anime.thumbnailUrl}
+            src={
+              imgError || !anime.thumbnailUrl
+                ? FALLBACK_IMG
+                : anime.thumbnailUrl
+            }
             alt={anime.title}
             className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
             loading="lazy"
+            onError={() => setImgError(true)}
           />
-          {/* Gradient overlay */}
-          <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
 
-          {/* Play button overlay */}
+          {/* Hover gradient */}
+          <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+
+          {/* Play button */}
           <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-            <div className="bg-primary/90 rounded-full p-3 shadow-accent-glow">
+            <div className="bg-primary/90 rounded-full p-3 shadow-lg glow-accent">
               <Play className="w-6 h-6 text-white fill-white" />
             </div>
           </div>
@@ -56,7 +68,7 @@ export default function AnimeCard({
             <span className="text-xs text-muted-foreground">
               {anime.viewCount >= 1000000
                 ? `${(anime.viewCount / 1000000).toFixed(1)}M`
-                : `${Math.floor(anime.viewCount / 1000)}K`}
+                : `${Math.max(0, Math.floor(anime.viewCount / 1000))}K`}
             </span>
           </div>
         </div>
@@ -64,7 +76,7 @@ export default function AnimeCard({
         {/* Info */}
         {!compact && (
           <div className="p-3 space-y-1.5">
-            <h3 className="font-display font-semibold text-foreground text-sm leading-tight truncate group-hover:text-primary transition-colors">
+            <h3 className="font-display font-semibold text-foreground text-sm leading-tight truncate group-hover:text-primary transition-colors duration-200">
               {anime.title}
             </h3>
             <div className="flex items-center justify-between">
@@ -93,7 +105,7 @@ export default function AnimeCard({
         )}
       </Link>
 
-      {/* Watchlist button */}
+      {/* Watchlist button (hover) */}
       {onWatchlistToggle && (
         <div className="absolute bottom-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
           <Button

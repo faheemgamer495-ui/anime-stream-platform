@@ -1,6 +1,7 @@
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useQuery } from "@tanstack/react-query";
 import { Link, useParams } from "@tanstack/react-router";
 import {
   ArrowLeft,
@@ -11,6 +12,7 @@ import {
   Eye,
   Heart,
   HeartOff,
+  Loader2,
   Play,
   Star,
   Tv,
@@ -18,17 +20,31 @@ import {
 import { motion } from "motion/react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import type { Episode, SeasonPublic } from "../backend.d";
 import { useAllAnime, useAnimeDetail } from "../hooks/useAnime";
 import { useAuth } from "../hooks/useAuth";
-import { useEpisodesByAnime } from "../hooks/useEpisodes";
 import { safeSeasonNumber, useSeasonsByAnime } from "../hooks/useSeasons";
 import {
   useAddToWatchlist,
   useIsInWatchlist,
   useRemoveFromWatchlist,
 } from "../hooks/useWatchlist";
+import { getEpisodesList } from "../lib/localStorageDB";
+import type { Episode, SeasonPublic } from "../lib/localStorageDB";
 import type { Anime } from "../types";
+
+function useEpisodesByAnime(animeId: string | undefined) {
+  return useQuery<Episode[]>({
+    queryKey: ["episodes_by_anime", animeId],
+    queryFn: () => {
+      if (!animeId) return [];
+      return getEpisodesList()
+        .filter((e) => e.animeId === animeId)
+        .sort((a, b) => Number(a.episodeNumber) - Number(b.episodeNumber));
+    },
+    enabled: !!animeId,
+    staleTime: 0,
+  });
+}
 
 function StarRating({ rating }: { rating: number }) {
   return (
@@ -93,11 +109,11 @@ function EpisodeCard({
     >
       <Link
         {...watchTo}
-        className="flex items-start gap-4 bg-card hover:bg-secondary border border-border rounded-xl p-3 transition-colors group"
+        className="flex items-start gap-4 bg-card hover:bg-secondary border border-border hover:border-primary/30 rounded-xl p-3 transition-colors group"
         data-ocid={`episode-card-${episode.id}`}
       >
         {/* Thumbnail */}
-        <div className="shrink-0 relative w-32 h-18 rounded-lg overflow-hidden">
+        <div className="shrink-0 relative w-32 rounded-lg overflow-hidden">
           <img
             src={
               episode.thumbnailUrl ||
@@ -111,9 +127,11 @@ function EpisodeCard({
               <Play className="w-4 h-4 text-white fill-white" />
             </div>
           </div>
-          <div className="absolute bottom-1 right-1 bg-black/80 text-white text-[10px] font-mono px-1.5 py-0.5 rounded">
-            {episode.duration ?? "—"}
-          </div>
+          {episode.duration && (
+            <div className="absolute bottom-1 right-1 bg-black/80 text-white text-[10px] font-mono px-1.5 py-0.5 rounded">
+              {episode.duration}
+            </div>
+          )}
         </div>
 
         {/* Info */}
@@ -130,6 +148,13 @@ function EpisodeCard({
             {episode.description}
           </p>
         </div>
+
+        {/* Watch Now button on hover */}
+        <div className="hidden sm:flex items-center shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+          <span className="text-xs font-semibold text-primary bg-primary/10 px-3 py-1.5 rounded-lg border border-primary/20">
+            Watch Now
+          </span>
+        </div>
       </Link>
     </motion.div>
   );
@@ -141,35 +166,20 @@ interface SeasonTabsProps {
   seasons: SeasonPublic[];
   activeSeasonId: string | null;
   onSeasonChange: (id: string) => void;
+  isLoadingEpisodes?: boolean;
 }
 
 function SeasonTabs({
   seasons,
   activeSeasonId,
   onSeasonChange,
+  isLoadingEpisodes,
 }: SeasonTabsProps) {
   if (seasons.length === 0) return null;
 
   return (
     <div className="mb-4" data-ocid="detail-season-selector">
-      {/* Mobile: dropdown */}
-      <div className="block sm:hidden">
-        <select
-          value={activeSeasonId ?? ""}
-          onChange={(e) => onSeasonChange(e.target.value)}
-          className="w-full bg-card border border-border text-foreground text-sm rounded-lg h-10 px-3 focus:outline-none focus:border-primary"
-          aria-label="Select season"
-        >
-          {seasons.map((s) => (
-            <option key={s.id} value={s.id}>
-              {s.name}
-            </option>
-          ))}
-        </select>
-      </div>
-
-      {/* Desktop: tab strip */}
-      <div className="hidden sm:flex items-center gap-1.5 flex-wrap">
+      <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none">
         {seasons.map((s) => {
           const isActive = s.id === activeSeasonId;
           return (
@@ -179,16 +189,19 @@ function SeasonTabs({
               onClick={() => onSeasonChange(s.id)}
               data-ocid={`detail-season-tab-${s.id}`}
               className={[
-                "px-4 py-1.5 rounded-lg text-sm font-semibold transition-all",
+                "px-4 py-1.5 rounded-lg text-sm font-semibold transition-all whitespace-nowrap shrink-0",
                 isActive
-                  ? "bg-primary text-white shadow-sm"
-                  : "bg-card border border-border text-muted-foreground hover:border-primary/50 hover:text-foreground",
+                  ? "bg-primary text-white shadow-sm border-2 border-primary"
+                  : "bg-card border-2 border-border text-muted-foreground hover:border-primary/50 hover:text-foreground",
               ].join(" ")}
             >
               {s.name}
             </button>
           );
         })}
+        {isLoadingEpisodes && (
+          <Loader2 className="w-4 h-4 animate-spin text-primary shrink-0 ml-1" />
+        )}
       </div>
     </div>
   );
@@ -259,13 +272,6 @@ export default function AnimeDetailPage() {
   const activeSeasonNumber = activeSeason
     ? safeSeasonNumber(activeSeason.seasonNumber)
     : null;
-
-  // Increment view count on mount
-  useEffect(() => {
-    if (anime) {
-      // In a real backend, call actor.incrementViewCount(id)
-    }
-  }, [anime]);
 
   const toggleWatchlist = () => {
     if (!isLoggedIn || !principalId) {
@@ -535,14 +541,15 @@ export default function AnimeDetailPage() {
                   seasons={seasons}
                   activeSeasonId={activeSeasonId}
                   onSeasonChange={setActiveSeasonId}
+                  isLoadingEpisodes={epsLoading}
                 />
               )}
 
               {epsLoading ? (
                 <div className="space-y-3">
-                  {[1, 2, 3].map((i) => (
+                  {["ep-sk-1", "ep-sk-2", "ep-sk-3"].map((k) => (
                     <Skeleton
-                      key={i}
+                      key={k}
                       className="h-[5.5rem] w-full bg-muted rounded-xl"
                     />
                   ))}
@@ -555,7 +562,7 @@ export default function AnimeDetailPage() {
                   <Tv className="w-12 h-12 text-muted-foreground mx-auto mb-3" />
                   <p className="text-muted-foreground font-medium">
                     {seasons.length > 0 && activeSeasonId
-                      ? "No episodes available for this season"
+                      ? "No episodes in this season yet."
                       : "No episodes yet"}
                   </p>
                   <p className="text-xs text-muted-foreground/70 mt-1">
@@ -625,7 +632,7 @@ export default function AnimeDetailPage() {
               </div>
             </div>
 
-            {/* Season selector for sidebar (only if seasons exist) */}
+            {/* Season selector for sidebar */}
             {seasons.length > 0 && (
               <div className="bg-card border border-border rounded-xl p-5 space-y-3">
                 <h3 className="font-display font-bold text-sm text-muted-foreground uppercase tracking-widest">

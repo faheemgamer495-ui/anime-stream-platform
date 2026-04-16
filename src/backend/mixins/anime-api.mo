@@ -1,49 +1,49 @@
-import List "mo:core/List";
+import Runtime "mo:core/Runtime";
 import Time "mo:core/Time";
 import AnimeTypes "../types/anime";
 import Common "../types/common";
 import AnimeLib "../lib/anime";
 
+/// Anime public and admin API — operates on plain arrays (stable-var compatible).
+/// NOTE: This mixin is NOT included in main.mo; the methods are implemented inline there.
+/// It is kept as a reference contract only.
 mixin (
-  animes : List.List<AnimeTypes.Anime>,
-  nextAnimeId : List.List<Nat>
+  animes : [AnimeTypes.Anime],
+  nextAnimeId : Nat,
 ) {
   public query func getAllAnime() : async [AnimeTypes.AnimePublic] {
-    AnimeLib.getAll(animes);
+    Runtime.trap("not implemented");
   };
 
   public query func getAnime(id : Common.AnimeId) : async ?AnimeTypes.AnimePublic {
-    AnimeLib.getById(animes, id);
+    Runtime.trap("not implemented");
   };
 
   public query func getFeaturedAnime() : async [AnimeTypes.AnimePublic] {
-    AnimeLib.getFeatured(animes);
+    Runtime.trap("not implemented");
   };
 
   public query func searchAnime(term : Text) : async [AnimeTypes.AnimePublic] {
-    AnimeLib.search(animes, term);
+    Runtime.trap("not implemented");
   };
 
   public query func filterAnimeByGenre(genre : Text) : async [AnimeTypes.AnimePublic] {
-    AnimeLib.filterByGenre(animes, genre);
+    Runtime.trap("not implemented");
   };
 
-  public shared func createAnime(input : AnimeTypes.AnimeInput) : async AnimeTypes.AnimePublic {
-    let currentId = nextAnimeId.at(0);
-    let result = AnimeLib.create(animes, currentId, input, Time.now());
-    nextAnimeId.put(0, currentId + 1);
-    result;
+  public shared func createAnime(adminToken : Text, input : AnimeTypes.AnimeInput) : async AnimeTypes.AnimePublic {
+    Runtime.trap("not implemented");
   };
 
-  public shared func updateAnime(id : Common.AnimeId, input : AnimeTypes.AnimeInput) : async ?AnimeTypes.AnimePublic {
-    AnimeLib.update(animes, id, input);
+  public shared func updateAnime(adminToken : Text, id : Common.AnimeId, input : AnimeTypes.AnimeInput) : async ?AnimeTypes.AnimePublic {
+    Runtime.trap("not implemented");
   };
 
-  public shared func deleteAnime(id : Common.AnimeId) : async Bool {
-    AnimeLib.delete(animes, id);
+  public shared func deleteAnime(adminToken : Text, id : Common.AnimeId) : async Bool {
+    Runtime.trap("not implemented");
   };
 
   public shared func incrementAnimeViewCount(id : Common.AnimeId) : async () {
-    AnimeLib.incrementViewCount(animes, id);
+    Runtime.trap("not implemented");
   };
 };

@@ -136,16 +136,31 @@ export const mockBackend: backendInterface = {
   getAllAnime: async () => sampleAnime,
   getFeaturedAnime: async () => sampleAnime.filter(a => a.isFeatured),
   getAnime: async (id) => sampleAnime.find(a => a.id === id) ?? null,
-  createAnime: async (input) => ({
+  createAnime: async (_adminToken, input) => ({
     id: "new-" + Date.now(),
-    ...input,
+    coverImageUrl: input.coverImageUrl,
+    title: input.title,
+    description: input.description,
+    isFeatured: input.isFeatured,
+    genres: input.genres,
+    rating: input.rating,
     viewCount: BigInt(0),
     createdAt: now,
   }),
-  updateAnime: async (id, input) => {
+  updateAnime: async (_adminToken, id, input) => {
     const existing = sampleAnime.find(a => a.id === id);
     if (!existing) return null;
-    return { ...existing, ...input };
+    return {
+      id: existing.id,
+      createdAt: existing.createdAt,
+      viewCount: existing.viewCount,
+      coverImageUrl: input.coverImageUrl,
+      title: input.title,
+      description: input.description,
+      isFeatured: input.isFeatured,
+      genres: input.genres,
+      rating: input.rating,
+    };
   },
   deleteAnime: async () => true,
   searchAnime: async (term) => sampleAnime.filter(a => a.title.toLowerCase().includes(term.toLowerCase())),
@@ -223,7 +238,7 @@ export const mockBackend: backendInterface = {
   },
   deleteAdConfig: async () => true,
 
-  aiChat: async (userMessage) => {
+  aiChat: async (userMessage, _pageContext, _errorContext) => {
     const msg = userMessage.toLowerCase();
     if (msg.includes("video")) return "Try refreshing the page or checking your internet connection. If the video still won't play, try a different browser.";
     if (msg.includes("login")) return "Make sure you're using Internet Identity to log in. Clear your browser cache and try again if issues persist.";
@@ -297,4 +312,13 @@ export const mockBackend: backendInterface = {
   updateSeason: async () => null,
   deleteSeason: async () => true,
   getEpisodesBySeason: async () => [],
+
+  // ── Guest Watchlist ───────────────────────────────────────────────────────
+  addToWatchlistGuest: async () => undefined,
+  getGuestWatchlist: async () => [],
+  isInWatchlistGuest: async () => false,
+  removeFromWatchlistGuest: async () => true,
+
+  // ── All Episodes ──────────────────────────────────────────────────────────
+  getAllEpisodes: async () => episodeStore,
 };

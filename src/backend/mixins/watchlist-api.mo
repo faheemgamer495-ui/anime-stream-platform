@@ -1,23 +1,23 @@
-import List "mo:core/List";
-import Time "mo:core/Time";
+import Runtime "mo:core/Runtime";
 import WatchlistTypes "../types/watchlist";
 import Common "../types/common";
-import WatchlistLib "../lib/watchlist";
 
-mixin (watchlist : List.List<WatchlistTypes.WatchlistEntry>) {
+/// Watchlist API contract — array-based, matches main.mo stable-var pattern.
+/// NOTE: Not included in main.mo; methods are inline there. Reference only.
+mixin (watchlist : [WatchlistTypes.WatchlistEntry]) {
   public shared ({ caller }) func addToWatchlist(animeId : Common.AnimeId) : async () {
-    WatchlistLib.add(watchlist, caller, animeId, Time.now());
+    Runtime.trap("not implemented");
   };
 
   public shared ({ caller }) func removeFromWatchlist(animeId : Common.AnimeId) : async Bool {
-    WatchlistLib.remove(watchlist, caller, animeId);
+    Runtime.trap("not implemented");
   };
 
   public query ({ caller }) func getUserWatchlist() : async [WatchlistTypes.WatchlistEntry] {
-    WatchlistLib.getByUser(watchlist, caller);
+    Runtime.trap("not implemented");
   };
 
   public query ({ caller }) func isInWatchlist(animeId : Common.AnimeId) : async Bool {
-    WatchlistLib.isInWatchlist(watchlist, caller, animeId);
+    Runtime.trap("not implemented");
   };
 };

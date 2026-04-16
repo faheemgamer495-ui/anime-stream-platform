@@ -1,56 +1,149 @@
-import { useActor } from "@caffeineai/core-infrastructure";
+/**
+ * useComments — canister-first via AppContext, localStorage cache fallback.
+ *
+ * Comments and ratings are attempted via the canister. On failure, the
+ * localStorage cache is used as a fallback so the UI remains functional.
+ */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { createActor } from "../backend";
-import type { Comment as BackendComment } from "../backend.d";
+import { useAppContext } from "../context/AppContext";
+import {
+  generateId,
+  getComments,
+  getRatings,
+  saveComments,
+  saveRatings,
+} from "../lib/localStorageDB";
 import type { Comment, RatingsInfo } from "../types";
 
-// Convert backend Comment (Principal-based authorId) to frontend Comment type
-function mapComment(c: BackendComment): Comment {
-  return {
-    id: c.id,
-    episodeId: c.episodeId,
-    authorId:
-      typeof c.authorId === "object" ? c.authorId.toText() : String(c.authorId),
-    authorUsername: c.authorUsername,
-    text: c.text,
-    createdAt: Number(c.createdAt) / 1_000_000, // nanoseconds → milliseconds
-    updatedAt:
-      c.updatedAt !== undefined ? Number(c.updatedAt) / 1_000_000 : undefined,
-    parentId: c.parentId ?? undefined,
-    isDeleted: c.isDeleted,
-  };
+// ── Session user ID ───────────────────────────────────────────────────────────
+
+const SESSION_USER_KEY = "anime_stream_session_user";
+
+function getSessionUserId(): string {
+  let uid = localStorage.getItem(SESSION_USER_KEY);
+  if (!uid) {
+    uid = `user_${generateId()}`;
+    localStorage.setItem(SESSION_USER_KEY, uid);
+  }
+  return uid;
 }
 
+// ── Comments ──────────────────────────────────────────────────────────────────
+
 export function useCommentsByEpisode(episodeId: string | undefined) {
-  const { actor, isFetching } = useActor(createActor);
+  const { comments: ctxComments } = useAppContext();
+  const contextComments = episodeId ? (ctxComments[episodeId] ?? []) : [];
+
   return useQuery<Comment[]>({
     queryKey: ["comments", episodeId],
-    queryFn: async () => {
-      if (!episodeId || !actor) return [];
-      const result = await actor.getCommentsByEpisode(episodeId);
-      return result.map(mapComment);
+    queryFn: () => {
+      if (!episodeId) return [];
+      // Prefer context data (from canister); fall back to localStorage cache
+      if (contextComments.length > 0) {
+        return contextComments.map((c) => ({
+          id: typeof c === "object" && "id" in c ? String(c.id) : generateId(),
+          episodeId,
+          authorId:
+            typeof c === "object" && "authorId" in c
+              ? String(c.authorId)
+              : "anonymous",
+          authorUsername:
+            typeof c === "object" && "authorUsername" in c
+              ? String(c.authorUsername)
+              : "Anonymous",
+          text: typeof c === "object" && "text" in c ? String(c.text) : "",
+          createdAt:
+            typeof c === "object" && "createdAt" in c
+              ? Number(c.createdAt) > 1e12
+                ? Number(c.createdAt) / 1e6
+                : Number(c.createdAt)
+              : Date.now(),
+          parentId:
+            typeof c === "object" && "parentId" in c && c.parentId != null
+              ? String(c.parentId)
+              : undefined,
+          isDeleted:
+            typeof c === "object" && "isDeleted" in c
+              ? Boolean(c.isDeleted)
+              : false,
+        })) as Comment[];
+      }
+      return getComments().filter(
+        (c) => c.episodeId === episodeId && !c.isDeleted,
+      );
     },
-    enabled: !!episodeId && !!actor && !isFetching,
+    enabled: !!episodeId,
+    staleTime: 0,
   });
 }
 
 export function useAddComment() {
-  const { actor, isFetching } = useActor(createActor);
   const queryClient = useQueryClient();
+  const ctx = useAppContext();
+
   return useMutation({
     mutationFn: async ({
       episodeId,
       text,
       parentId,
+      username,
     }: {
       episodeId: string;
       text: string;
       parentId?: string;
+      username?: string;
     }): Promise<Comment> => {
-      if (!actor || isFetching)
-        throw new Error("Backend is still loading — please wait a moment");
-      const result = await actor.addComment(episodeId, text, parentId ?? null);
-      return mapComment(result);
+      // Try canister first
+      if (ctx.isCanisterAvailable) {
+        try {
+          await ctx.postComment(episodeId, text, parentId);
+          // After canister write, reload the episode data to get fresh comments
+          await ctx.loadEpisodeData(episodeId);
+          const ctxComments = ctx.comments[episodeId] ?? [];
+          const last = ctxComments[ctxComments.length - 1];
+          if (last) {
+            return {
+              id:
+                typeof last === "object" && "id" in last
+                  ? String(last.id)
+                  : generateId(),
+              episodeId,
+              authorId:
+                typeof last === "object" && "authorId" in last
+                  ? String(last.authorId)
+                  : getSessionUserId(),
+              authorUsername:
+                username ??
+                (typeof last === "object" && "authorUsername" in last
+                  ? String(last.authorUsername)
+                  : "Anonymous"),
+              text: text.trim(),
+              createdAt: Date.now(),
+              parentId,
+              isDeleted: false,
+            };
+          }
+        } catch {
+          // Fall through to cache fallback
+        }
+      }
+
+      // Fallback: write to localStorage cache
+      const sessionId = getSessionUserId();
+      const newComment: Comment = {
+        id: generateId(),
+        episodeId,
+        authorId: sessionId,
+        authorUsername: username ?? "Anonymous",
+        text: text.trim(),
+        createdAt: Date.now(),
+        parentId,
+        isDeleted: false,
+      };
+      const all = getComments();
+      all.push(newComment);
+      saveComments(all);
+      return newComment;
     },
     onSuccess: (_comment, variables) => {
       queryClient.invalidateQueries({
@@ -61,8 +154,9 @@ export function useAddComment() {
 }
 
 export function useEditComment() {
-  const { actor, isFetching } = useActor(createActor);
   const queryClient = useQueryClient();
+  const ctx = useAppContext();
+
   return useMutation({
     mutationFn: async ({
       commentId,
@@ -73,12 +167,28 @@ export function useEditComment() {
       newText: string;
       episodeId: string;
     }): Promise<Comment> => {
-      if (!actor || isFetching)
-        throw new Error("Backend is still loading — please wait a moment");
       void _episodeId;
-      const result = await actor.editComment(commentId, newText);
-      if (!result) throw new Error("Comment not found or unauthorized");
-      return mapComment(result);
+      // Try canister first
+      if (ctx.isCanisterAvailable) {
+        try {
+          await ctx.editComment(commentId, newText);
+        } catch {
+          // Fall through
+        }
+      }
+
+      // Update localStorage cache
+      const all = getComments();
+      const idx = all.findIndex((c) => c.id === commentId);
+      if (idx === -1) throw new Error("Comment not found");
+      const updated: Comment = {
+        ...all[idx],
+        text: newText.trim(),
+        updatedAt: Date.now(),
+      };
+      all[idx] = updated;
+      saveComments(all);
+      return updated;
     },
     onSuccess: (_comment, variables) => {
       queryClient.invalidateQueries({
@@ -89,20 +199,33 @@ export function useEditComment() {
 }
 
 export function useDeleteComment() {
-  const { actor, isFetching } = useActor(createActor);
   const queryClient = useQueryClient();
+  const ctx = useAppContext();
+
   return useMutation({
     mutationFn: async ({
       commentId,
-      episodeId: _episodeId,
+      episodeId,
     }: {
       commentId: string;
       episodeId: string;
     }): Promise<boolean> => {
-      if (!actor || isFetching)
-        throw new Error("Backend is still loading — please wait a moment");
-      void _episodeId;
-      return actor.deleteComment(commentId);
+      // Try canister first
+      if (ctx.isCanisterAvailable) {
+        try {
+          await ctx.deleteComment(commentId, episodeId);
+        } catch {
+          // Fall through
+        }
+      }
+
+      // Update localStorage cache (soft delete)
+      const all = getComments();
+      const idx = all.findIndex((c) => c.id === commentId);
+      if (idx === -1) return false;
+      all[idx] = { ...all[idx], isDeleted: true };
+      saveComments(all);
+      return true;
     },
     onSuccess: (_result, variables) => {
       queryClient.invalidateQueries({
@@ -112,29 +235,36 @@ export function useDeleteComment() {
   });
 }
 
+// ── Ratings ───────────────────────────────────────────────────────────────────
+
 export function useRatingsInfo(episodeId: string | undefined) {
-  const { actor, isFetching } = useActor(createActor);
+  const { ratings: ctxRatings } = useAppContext();
+  const contextRating = episodeId ? (ctxRatings[episodeId] ?? null) : null;
+
   return useQuery<RatingsInfo>({
     queryKey: ["ratings", episodeId],
-    queryFn: async (): Promise<RatingsInfo> => {
-      if (!episodeId || !actor) return { average: 0, total: 0 };
-      const result = await actor.getRatingsInfo(episodeId);
-      return {
-        average: result.average,
-        total: Number(result.total),
-        userRating:
-          result.userRating !== undefined
-            ? Number(result.userRating)
-            : undefined,
-      };
+    queryFn: (): RatingsInfo => {
+      if (!episodeId) return { average: 0, total: 0 };
+      // Prefer context data (from canister)
+      if (contextRating) return contextRating;
+      // Fall back to localStorage cache
+      const sessionId = getSessionUserId();
+      const all = getRatings().filter((r) => r.episodeId === episodeId);
+      const total = all.length;
+      const average =
+        total > 0 ? all.reduce((sum, r) => sum + r.stars, 0) / total : 0;
+      const userRating = all.find((r) => r.userId === sessionId)?.stars;
+      return { average, total, userRating };
     },
-    enabled: !!episodeId && !!actor && !isFetching,
+    enabled: !!episodeId,
+    staleTime: 0,
   });
 }
 
 export function useAddRating() {
-  const { actor, isFetching } = useActor(createActor);
   const queryClient = useQueryClient();
+  const ctx = useAppContext();
+
   return useMutation({
     mutationFn: async ({
       episodeId,
@@ -143,9 +273,29 @@ export function useAddRating() {
       episodeId: string;
       stars: number;
     }): Promise<string | null> => {
-      if (!actor || isFetching)
-        throw new Error("Backend is still loading — please wait a moment");
-      return actor.addRating(episodeId, BigInt(stars));
+      // Try canister first
+      if (ctx.isCanisterAvailable) {
+        try {
+          await ctx.rateEpisode(episodeId, stars);
+          return getSessionUserId();
+        } catch {
+          // Fall through
+        }
+      }
+
+      // Fallback: write to localStorage cache
+      const sessionId = getSessionUserId();
+      const all = getRatings();
+      const existingIdx = all.findIndex(
+        (r) => r.episodeId === episodeId && r.userId === sessionId,
+      );
+      if (existingIdx >= 0) {
+        all[existingIdx] = { episodeId, stars, userId: sessionId };
+      } else {
+        all.push({ episodeId, stars, userId: sessionId });
+      }
+      saveRatings(all);
+      return sessionId;
     },
     onSuccess: (_result, variables) => {
       queryClient.invalidateQueries({

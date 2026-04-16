@@ -80,7 +80,7 @@ function StarRating({ episodeId, isLoggedIn }: StarRatingProps) {
                 "w-7 h-7 transition-colors duration-150",
                 displayRating >= star
                   ? "fill-yellow-400 text-yellow-400"
-                  : "fill-transparent text-zinc-600",
+                  : "fill-transparent text-muted-foreground",
               ].join(" ")}
             />
           </button>
@@ -93,16 +93,18 @@ function StarRating({ episodeId, isLoggedIn }: StarRatingProps) {
             <span className="text-yellow-400 font-bold">
               {average.toFixed(1)}
             </span>
-            <span className="text-zinc-500">/ 5</span>
-            <span className="text-zinc-500">
+            <span className="text-muted-foreground">/ 5</span>
+            <span className="text-muted-foreground">
               ({total} rating{total !== 1 ? "s" : ""})
             </span>
           </>
         ) : (
-          <span className="text-zinc-500">No ratings yet</span>
+          <span className="text-muted-foreground">No ratings yet</span>
         )}
         {!isLoggedIn && (
-          <span className="text-zinc-600 text-xs ml-1">— Login to rate</span>
+          <span className="text-muted-foreground text-xs ml-1">
+            — Login to rate
+          </span>
         )}
       </div>
     </div>
@@ -153,20 +155,31 @@ function CommentForm({
 
   return (
     <form onSubmit={handleSubmit} className="flex flex-col gap-2">
+      {!parentId && (
+        <label
+          htmlFor="comment-input"
+          className="text-sm font-medium text-foreground"
+        >
+          Write a comment
+        </label>
+      )}
       <div className="relative">
         <textarea
           ref={textareaRef}
+          id={parentId ? "reply-input" : "comment-input"}
           value={text}
           onChange={(e) => setText(e.target.value.slice(0, MAX_CHARS))}
           placeholder={parentId ? "Write a reply…" : "Write a comment…"}
           rows={3}
-          className="w-full bg-zinc-800 border border-zinc-700 focus:border-red-600 text-zinc-100 placeholder:text-zinc-500 rounded-lg px-3 pt-2 pb-7 text-sm resize-none outline-none transition-colors duration-200"
+          className="w-full bg-card border border-border focus:border-primary text-foreground placeholder:text-muted-foreground rounded-lg px-3 pt-2 pb-7 text-sm resize-none outline-none transition-colors duration-200"
           data-ocid={parentId ? "reply-input" : "comment-input"}
         />
         <span
           className={[
             "absolute bottom-2 right-3 text-xs pointer-events-none",
-            text.length >= MAX_CHARS ? "text-red-400" : "text-zinc-600",
+            text.length >= MAX_CHARS
+              ? "text-destructive"
+              : "text-muted-foreground",
           ].join(" ")}
         >
           {text.length}/{MAX_CHARS}
@@ -177,7 +190,7 @@ function CommentForm({
           <button
             type="button"
             onClick={onCancel}
-            className="px-3 py-1.5 rounded-md text-sm text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 transition-colors duration-150"
+            className="px-3 py-1.5 rounded-md text-sm text-muted-foreground hover:text-foreground hover:bg-card transition-colors duration-150"
             data-ocid="cancel-reply-btn"
           >
             Cancel
@@ -186,7 +199,7 @@ function CommentForm({
         <button
           type="submit"
           disabled={!text.trim() || isPending}
-          className="flex items-center gap-1.5 px-4 py-1.5 rounded-md text-sm font-semibold bg-red-600 hover:bg-red-700 disabled:bg-zinc-700 disabled:text-zinc-500 text-white transition-colors duration-150"
+          className="flex items-center gap-1.5 px-4 py-1.5 rounded-md text-sm font-semibold bg-primary hover:bg-primary/90 disabled:bg-muted disabled:text-muted-foreground text-primary-foreground transition-colors duration-150"
           data-ocid="submit-comment-btn"
         >
           <Send className="w-3.5 h-3.5" />
@@ -262,7 +275,9 @@ function CommentItem({
   if (comment.isDeleted) {
     return (
       <div className={["py-2", isReply ? "" : ""].join(" ")}>
-        <p className="text-zinc-600 text-sm italic">[Comment deleted]</p>
+        <p className="text-muted-foreground text-sm italic">
+          [Comment deleted]
+        </p>
       </div>
     );
   }
@@ -272,21 +287,21 @@ function CommentItem({
       <div className="flex gap-3">
         {/* Avatar */}
         <div
-          className="w-8 h-8 rounded-full bg-red-600/20 border border-red-600/40 flex items-center justify-center flex-shrink-0 mt-0.5"
+          className="w-8 h-8 rounded-full bg-primary/20 border border-primary/40 flex items-center justify-center flex-shrink-0 mt-0.5"
           aria-hidden="true"
         >
-          <span className="text-red-400 text-xs font-bold">{avatarLetter}</span>
+          <span className="text-primary text-xs font-bold">{avatarLetter}</span>
         </div>
 
         <div className="flex-1 min-w-0">
           {/* Header */}
           <div className="flex items-baseline gap-2 flex-wrap">
-            <span className="text-white font-semibold text-sm">
+            <span className="text-foreground font-semibold text-sm">
               {comment.authorUsername}
             </span>
-            <span className="text-zinc-500 text-xs">{timeAgo}</span>
+            <span className="text-muted-foreground text-xs">{timeAgo}</span>
             {comment.updatedAt && comment.updatedAt !== comment.createdAt && (
-              <span className="text-zinc-600 text-xs">(edited)</span>
+              <span className="text-muted-foreground text-xs">(edited)</span>
             )}
           </div>
 
@@ -301,10 +316,10 @@ function CommentItem({
                     setEditText(e.target.value.slice(0, MAX_CHARS))
                   }
                   rows={2}
-                  className="w-full bg-zinc-800 border border-zinc-700 focus:border-red-600 text-zinc-100 rounded-lg px-3 pt-2 pb-6 text-sm resize-none outline-none transition-colors duration-200"
+                  className="w-full bg-card border border-border focus:border-primary text-foreground rounded-lg px-3 pt-2 pb-6 text-sm resize-none outline-none transition-colors duration-200"
                   data-ocid="edit-comment-input"
                 />
-                <span className="absolute bottom-1.5 right-2 text-[11px] text-zinc-600 pointer-events-none">
+                <span className="absolute bottom-1.5 right-2 text-[11px] text-muted-foreground pointer-events-none">
                   {editText.length}/{MAX_CHARS}
                 </span>
               </div>
@@ -312,7 +327,7 @@ function CommentItem({
                 <button
                   type="submit"
                   disabled={!editText.trim() || isEditPending}
-                  className="flex items-center gap-1 px-3 py-1 rounded text-xs font-semibold bg-red-600 hover:bg-red-700 disabled:bg-zinc-700 disabled:text-zinc-500 text-white transition-colors"
+                  className="flex items-center gap-1 px-3 py-1 rounded text-xs font-semibold bg-primary hover:bg-primary/90 disabled:bg-muted disabled:text-muted-foreground text-primary-foreground transition-colors"
                   data-ocid="save-edit-btn"
                 >
                   <Check className="w-3 h-3" />
@@ -324,7 +339,7 @@ function CommentItem({
                     setIsEditing(false);
                     setEditText(comment.text);
                   }}
-                  className="flex items-center gap-1 px-3 py-1 rounded text-xs text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 transition-colors"
+                  className="flex items-center gap-1 px-3 py-1 rounded text-xs text-muted-foreground hover:text-foreground hover:bg-card transition-colors"
                   data-ocid="cancel-edit-btn"
                 >
                   <X className="w-3 h-3" /> Cancel
@@ -332,7 +347,7 @@ function CommentItem({
               </div>
             </form>
           ) : (
-            <p className="text-zinc-200 text-sm mt-1 break-words">
+            <p className="text-foreground text-sm mt-1 break-words">
               {comment.text}
             </p>
           )}
@@ -344,7 +359,7 @@ function CommentItem({
                 <button
                   type="button"
                   onClick={() => setShowReplyForm((v) => !v)}
-                  className="flex items-center gap-1 text-xs text-zinc-500 hover:text-red-500 transition-colors duration-150"
+                  className="flex items-center gap-1 text-xs text-muted-foreground hover:text-primary transition-colors duration-150"
                   data-ocid="reply-btn"
                 >
                   <Reply className="w-3.5 h-3.5" />
@@ -356,7 +371,7 @@ function CommentItem({
                   <button
                     type="button"
                     onClick={() => setIsEditing(true)}
-                    className="flex items-center gap-1 text-xs text-zinc-600 hover:text-zinc-300 transition-colors duration-150 opacity-0 group-hover:opacity-100"
+                    className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors duration-150 opacity-0 group-hover:opacity-100"
                     data-ocid="edit-comment-btn"
                   >
                     <Pencil className="w-3 h-3" />
@@ -366,7 +381,7 @@ function CommentItem({
                     type="button"
                     onClick={handleDelete}
                     disabled={isDeletePending}
-                    className="flex items-center gap-1 text-xs text-zinc-600 hover:text-red-500 transition-colors duration-150 opacity-0 group-hover:opacity-100"
+                    className="flex items-center gap-1 text-xs text-muted-foreground hover:text-primary transition-colors duration-150 opacity-0 group-hover:opacity-100"
                     data-ocid="delete-comment-btn"
                   >
                     <Trash2 className="w-3 h-3" />
@@ -414,7 +429,7 @@ export function EpisodeComments({
 
   // Organize: top-level vs replies
   const topLevel = comments
-    .filter((c) => (!c.parentId && !c.isDeleted === false ? true : !c.parentId))
+    .filter((c) => !c.parentId && !c.isDeleted)
     .sort((a, b) => b.createdAt - a.createdAt);
 
   const repliesFor = (parentId: string) =>
@@ -428,28 +443,28 @@ export function EpisodeComments({
 
   return (
     <div
-      className="bg-zinc-950 border-t border-zinc-800"
+      className="bg-background border-t border-border"
       data-ocid="episode-comments"
     >
       <div className="max-w-3xl mx-auto px-4 py-6 space-y-6">
         {/* ── Rating Section ── */}
         <div className="space-y-2">
-          <h3 className="text-white font-semibold text-base flex items-center gap-2">
+          <h3 className="text-foreground font-semibold text-base flex items-center gap-2">
             <Star className="w-4 h-4 text-yellow-400" />
             Rate This Episode
           </h3>
           <StarRating episodeId={episodeId} isLoggedIn={isLoggedIn} />
         </div>
 
-        <div className="border-t border-zinc-800" />
+        <div className="border-t border-border" />
 
         {/* ── Comments Section ── */}
         <div className="space-y-4">
-          <h3 className="text-white font-semibold text-base flex items-center gap-2">
-            <MessageCircle className="w-4 h-4 text-red-500" />
+          <h3 className="text-foreground font-semibold text-base flex items-center gap-2">
+            <MessageCircle className="w-4 h-4 text-primary" />
             Comments
             {totalVisible > 0 && (
-              <span className="text-zinc-500 text-sm font-normal">
+              <span className="text-muted-foreground text-sm font-normal">
                 ({totalVisible})
               </span>
             )}
@@ -460,7 +475,7 @@ export function EpisodeComments({
             <CommentForm episodeId={episodeId} />
           ) : (
             <div
-              className="rounded-lg border border-zinc-800 bg-zinc-900/50 px-4 py-3 text-sm text-zinc-500 text-center"
+              className="rounded-lg border border-border bg-card px-4 py-3 text-sm text-muted-foreground text-center"
               data-ocid="login-to-comment"
             >
               <span>Login with Internet Identity to leave a comment</span>
@@ -472,18 +487,18 @@ export function EpisodeComments({
             <div className="space-y-4" data-ocid="comments-loading">
               {[1, 2, 3].map((i) => (
                 <div key={i} className="flex gap-3 animate-pulse">
-                  <div className="w-8 h-8 rounded-full bg-zinc-800 flex-shrink-0" />
+                  <div className="w-8 h-8 rounded-full bg-muted flex-shrink-0" />
                   <div className="flex-1 space-y-2">
-                    <div className="h-3 bg-zinc-800 rounded w-32" />
-                    <div className="h-3 bg-zinc-800 rounded w-full" />
-                    <div className="h-3 bg-zinc-800 rounded w-2/3" />
+                    <div className="h-3 bg-muted rounded w-32" />
+                    <div className="h-3 bg-muted rounded w-full" />
+                    <div className="h-3 bg-muted rounded w-2/3" />
                   </div>
                 </div>
               ))}
             </div>
           ) : topLevel.length === 0 ? (
             <div
-              className="text-center py-8 text-zinc-600 text-sm"
+              className="text-center py-8 text-muted-foreground text-sm"
               data-ocid="comments-empty"
             >
               No comments yet. Be the first to share your thoughts!
@@ -501,7 +516,7 @@ export function EpisodeComments({
                     />
                     {/* Replies */}
                     {replies.length > 0 && (
-                      <div className="ml-11 mt-3 pl-3 border-l-2 border-zinc-800 space-y-4">
+                      <div className="ml-11 mt-3 pl-3 border-l-2 border-border space-y-4">
                         {replies.map((reply) => (
                           <CommentItem
                             key={reply.id}
@@ -521,7 +536,7 @@ export function EpisodeComments({
                 <button
                   type="button"
                   onClick={() => setShowCount((n) => n + TOP_LEVEL_PAGE_SIZE)}
-                  className="w-full py-2.5 text-sm text-zinc-400 hover:text-zinc-200 border border-zinc-800 hover:border-zinc-700 rounded-lg transition-colors duration-150"
+                  className="w-full py-2.5 text-sm text-muted-foreground hover:text-foreground border border-border hover:border-input rounded-lg transition-colors duration-150"
                   data-ocid="load-more-comments"
                 >
                   Load more comments ({topLevel.length - showCount} remaining)

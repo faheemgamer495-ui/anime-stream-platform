@@ -1,52 +1,32 @@
+/**
+ * useAds — localStorage-only. No actor/canister calls.
+ */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { generateId, getAds, saveAds } from "../lib/localStorageDB";
 import type { AdConfig } from "../types";
-
-const SAMPLE_ADS: AdConfig[] = [
-  {
-    id: "ad1",
-    placement: "homepage_banner",
-    title: "Premium Membership — Ad Free Streaming",
-    imageUrl:
-      "https://images.unsplash.com/photo-1626814026160-2237a95fc5a0?w=1200&h=200&fit=crop",
-    targetUrl: "#",
-    isEnabled: true,
-    createdAt: Date.now(),
-  },
-  {
-    id: "ad2",
-    placement: "video_pre_roll",
-    title: "New Season of Attack on Titan",
-    imageUrl:
-      "https://images.unsplash.com/photo-1560169897-fc0cdbdfa4d5?w=800&h=450&fit=crop",
-    videoUrl:
-      "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4",
-    targetUrl: "#",
-    isEnabled: false,
-    createdAt: Date.now(),
-  },
-];
-
-let adStore: AdConfig[] = [...SAMPLE_ADS];
 
 export function useAllAds() {
   return useQuery<AdConfig[]>({
     queryKey: ["ads", "all"],
-    queryFn: async () => [...adStore],
+    queryFn: () => getAds(),
+    staleTime: 0,
   });
 }
 
 export function useEnabledAds() {
   return useQuery<AdConfig[]>({
     queryKey: ["ads", "enabled"],
-    queryFn: async () => adStore.filter((a) => a.isEnabled),
+    queryFn: () => getAds().filter((a) => a.isEnabled),
+    staleTime: 0,
   });
 }
 
 export function useAdsByPlacement(placement: AdConfig["placement"]) {
   return useQuery<AdConfig[]>({
     queryKey: ["ads", "placement", placement],
-    queryFn: async () =>
-      adStore.filter((a) => a.placement === placement && a.isEnabled),
+    queryFn: () =>
+      getAds().filter((a) => a.placement === placement && a.isEnabled),
+    staleTime: 0,
   });
 }
 
@@ -58,10 +38,12 @@ export function useCreateAd() {
     ): Promise<AdConfig> => {
       const newAd: AdConfig = {
         ...data,
-        id: String(Date.now()),
+        id: generateId(),
         createdAt: Date.now(),
       };
-      adStore = [newAd, ...adStore];
+      const all = getAds();
+      all.unshift(newAd);
+      saveAds(all);
       return newAd;
     },
     onSuccess: () => {
@@ -77,10 +59,12 @@ export function useUpdateAd() {
       id,
       data,
     }: { id: string; data: Partial<AdConfig> }): Promise<AdConfig> => {
-      const idx = adStore.findIndex((a) => a.id === id);
+      const all = getAds();
+      const idx = all.findIndex((a) => a.id === id);
       if (idx === -1) throw new Error("Ad not found");
-      adStore[idx] = { ...adStore[idx], ...data };
-      return adStore[idx];
+      all[idx] = { ...all[idx], ...data };
+      saveAds(all);
+      return all[idx];
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["ads"] });
@@ -92,7 +76,8 @@ export function useDeleteAd() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (id: string): Promise<void> => {
-      adStore = adStore.filter((a) => a.id !== id);
+      const filtered = getAds().filter((a) => a.id !== id);
+      saveAds(filtered);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["ads"] });

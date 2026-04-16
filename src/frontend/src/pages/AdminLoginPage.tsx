@@ -15,7 +15,7 @@ export default function AdminLoginPage() {
   const [showPassword, setShowPassword] = useState(false);
 
   useEffect(() => {
-    if (isAdminLoggedIn) navigate({ to: "/admin" });
+    if (isAdminLoggedIn) navigate({ to: "/preview/admin" });
   }, [isAdminLoggedIn, navigate]);
 
   const handleSubmit = async (e: React.FormEvent) => {

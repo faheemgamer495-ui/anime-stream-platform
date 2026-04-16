@@ -25,7 +25,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { useActor } from "@caffeineai/core-infrastructure";
 import { useNavigate } from "@tanstack/react-router";
 import {
   AlertTriangle,
@@ -49,8 +48,6 @@ import {
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
-import { createActor } from "../backend";
-import type { Episode, SeasonPublic } from "../backend.d";
 import { useAdminAuth } from "../hooks/useAdminAuth";
 import { useAllAnime } from "../hooks/useAnime";
 import {
@@ -70,6 +67,9 @@ import {
   useSeasonsByAnime,
   useUpdateSeason,
 } from "../hooks/useSeasons";
+import type { SeasonPublic } from "../lib/localStorageDB";
+import type { Episode } from "../lib/localStorageDB";
+import { getSeasonsByAnime as lsGetSeasonsByAnime } from "../lib/localStorageDB";
 import { AdminLayout } from "./AdminDashboardPage";
 
 const EMPTY_FORM: EpisodeFormData = {
@@ -570,19 +570,6 @@ function VideoSourceTabs({
   );
 }
 
-// ── Backend loading banner ──────────────────────────────────────────────────
-
-function BackendNotReadyBanner() {
-  return (
-    <div className="flex items-center gap-2 px-4 py-3 rounded-lg bg-yellow-500/10 border border-yellow-500/30 text-yellow-400 text-sm mb-4">
-      <Loader2 className="w-4 h-4 animate-spin shrink-0" />
-      <span>
-        Connecting to backend… Episode saving will be available once connected.
-      </span>
-    </div>
-  );
-}
-
 function UrlFormatHint() {
   return (
     <p className="text-[11px] text-white/35 leading-snug">
@@ -986,7 +973,6 @@ function SeasonManagement({ animeId, episodes }: SeasonManagementProps) {
 export default function AdminEpisodesPage() {
   const { isAdminLoggedIn } = useAdminAuth();
   const navigate = useNavigate();
-  const { actor, isFetching: actorLoading } = useActor(createActor);
   const { data: anime = [] } = useAllAnime();
   const [selectedAnimeId, setSelectedAnimeId] = useState<string>("");
   // Tracks the anime selected inside the episode form (may differ from outer filter)
@@ -1003,8 +989,13 @@ export default function AdminEpisodesPage() {
     isLoading: formSeasonsLoading,
     isFetching: formSeasonsFetching,
   } = useSeasonsByAnime(formAnimeId || undefined);
-  // Consider seasons as loading if either the initial load or a refetch is in progress
-  const formSeasonsAnyLoading = formSeasonsLoading || formSeasonsFetching;
+  // Only show "loading seasons" spinner if there's no localStorage data yet
+  // This prevents false "Create a season first" message during backend sync
+  const formSeasonsHasLocalData = formAnimeId
+    ? lsGetSeasonsByAnime(formAnimeId).length > 0
+    : false;
+  const formSeasonsAnyLoading =
+    (formSeasonsLoading || formSeasonsFetching) && !formSeasonsHasLocalData;
   const createEpisode = useCreateEpisode();
   const updateEpisode = useUpdateEpisode();
   const deleteEpisode = useDeleteEpisode();
@@ -1056,9 +1047,9 @@ export default function AdminEpisodesPage() {
     return null;
   }
 
-  const backendReady = !!actor && !actorLoading;
+  const backendReady = true; // localStorage-only mode, always ready
   // hasSeasonsForAnime: only true when loading is done AND seasons exist
-  // This prevents false "Create a season first" message during async fetch
+  // With localStorage as initialData, this should be true immediately if seasons were created
   const hasSeasonsForAnime = !formSeasonsAnyLoading && formSeasons.length > 0;
 
   const resetForm = () => {
@@ -1142,13 +1133,6 @@ export default function AdminEpisodesPage() {
       toast.info(urlResult.notice);
     }
 
-    if (!backendReady) {
-      const msg = "Backend is still connecting — please wait and try again";
-      setSubmitError(msg);
-      toast.error(msg);
-      return;
-    }
-
     setLastSubmitData(resolvedForm);
 
     try {
@@ -1183,6 +1167,8 @@ export default function AdminEpisodesPage() {
   };
 
   const isSaving = createEpisode.isPending || updateEpisode.isPending;
+  // Allow saving even when backend is not yet connected — localStorage write-through handles persistence
+  const canSave = !isSaving && !formSeasonsAnyLoading;
   const selectedAnime = anime.find((a) => a.id === selectedAnimeId);
 
   return (
@@ -1196,23 +1182,17 @@ export default function AdminEpisodesPage() {
       action={
         <Button
           onClick={openCreate}
-          disabled={!backendReady}
+          disabled={false}
           className="bg-primary hover:bg-primary/90 gap-2 h-9 md:h-10 text-xs md:text-sm disabled:opacity-50"
           data-ocid="add-episode-btn"
         >
-          {actorLoading ? (
-            <Loader2 className="w-4 h-4 animate-spin" />
-          ) : (
-            <Plus className="w-4 h-4" />
-          )}
+          <Plus className="w-4 h-4" />
           <span className="hidden sm:inline">Add Episode</span>
           <span className="sm:hidden">Add</span>
         </Button>
       }
     >
       <div className="space-y-4 md:space-y-5">
-        {actorLoading && <BackendNotReadyBanner />}
-
         {/* Anime selector */}
         <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
           <Label className="shrink-0 text-white/50 text-xs font-semibold uppercase tracking-wider">
@@ -1270,7 +1250,7 @@ export default function AdminEpisodesPage() {
               <p className="text-sm">No episodes yet for this anime</p>
               <Button
                 onClick={openCreate}
-                disabled={!backendReady}
+                disabled={false}
                 size="sm"
                 className="bg-primary hover:bg-primary/90 gap-2 disabled:opacity-50"
               >
@@ -1438,7 +1418,8 @@ export default function AdminEpisodesPage() {
           {!backendReady && (
             <div className="flex items-center gap-2 px-3 py-2.5 rounded-lg bg-yellow-500/10 border border-yellow-500/30 text-yellow-400 text-xs">
               <Loader2 className="w-3.5 h-3.5 animate-spin shrink-0" />
-              Connecting to backend — saving will work once connected
+              Connecting to backend — data is saved locally and will sync when
+              connected
             </div>
           )}
 
@@ -1853,10 +1834,7 @@ export default function AdminEpisodesPage() {
               <Button
                 type="submit"
                 disabled={
-                  isSaving ||
-                  !backendReady ||
-                  formSeasonsAnyLoading ||
-                  (hasSeasonsForAnime && formSeasons.length === 0)
+                  !canSave || (hasSeasonsForAnime && formSeasons.length === 0)
                 }
                 className="flex-1 bg-primary hover:bg-primary/90 h-11 gap-2 disabled:opacity-60"
                 data-ocid="ep-form-submit"
@@ -1865,11 +1843,6 @@ export default function AdminEpisodesPage() {
                   <>
                     <Loader2 className="w-4 h-4 animate-spin" />
                     Saving...
-                  </>
-                ) : !backendReady ? (
-                  <>
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    Connecting…
                   </>
                 ) : (
                   <>{editingEpisode ? "Update Episode" : "Add Episode"}</>

@@ -139,14 +139,15 @@ service : {
    (Comment);
   addRating: (episodeId: text, stars: nat) -> (opt text);
   addToWatchlist: (animeId: text) -> ();
+  addToWatchlistGuest: (_userId: text, _animeId: text) -> ();
   aiChat: (userMessage: text, pageContext: text, errorContext: text) ->
    (text);
   createAdConfig: (input: AdConfigInput) -> (AdConfigPublic);
-  createAnime: (input: AnimeInput) -> (AnimePublic);
+  createAnime: (adminToken: text, input: AnimeInput) -> (AnimePublic);
   createEpisode: (adminToken: text, input: EpisodeInput) -> (Episode);
   createSeason: (adminToken: text, input: SeasonInput) -> (SeasonPublic);
   deleteAdConfig: (id: text) -> (bool);
-  deleteAnime: (id: text) -> (bool);
+  deleteAnime: (adminToken: text, id: text) -> (bool);
   deleteAnimeRequest: (id: text, adminToken: text) -> (bool);
   deleteComment: (commentId: text) -> (bool);
   deleteEpisode: (adminToken: text, id: text) -> (bool);
@@ -156,6 +157,7 @@ service : {
   getAdsByPlacement: (placement: AdPlacement) -> (vec AdConfigPublic) query;
   getAllAds: () -> (vec AdConfigPublic) query;
   getAllAnime: () -> (vec AnimePublic) query;
+  getAllEpisodes: () -> (vec Episode) query;
   getAnime: (id: text) -> (opt AnimePublic) query;
   getAnimeRequests: (adminToken: text) -> (vec AnimeRequest) query;
   getCommentsByEpisode: (episodeId: text) -> (vec Comment) query;
@@ -164,6 +166,7 @@ service : {
   getEpisodesByAnime: (animeId: text) -> (vec Episode) query;
   getEpisodesBySeason: (seasonId: SeasonId) -> (vec Episode) query;
   getFeaturedAnime: () -> (vec AnimePublic) query;
+  getGuestWatchlist: (_userId: text) -> (vec text) query;
   getRatingsInfo: (episodeId: text) ->
    (record {
       average: float64;
@@ -177,14 +180,17 @@ service : {
   incrementAnimeViewCount: (id: text) -> ();
   isAdminUser: () -> (bool) query;
   isInWatchlist: (animeId: text) -> (bool) query;
+  isInWatchlistGuest: (_userId: text, _animeId: text) -> (bool) query;
   listAllUsers: () -> (vec UserPublic) query;
   markRequestComplete: (id: text, adminToken: text) -> (bool);
   registerUser: (input: UserInput) -> (UserPublic);
   removeFromWatchlist: (animeId: text) -> (bool);
+  removeFromWatchlistGuest: (_userId: text, _animeId: text) -> (bool);
   searchAnime: (term: text) -> (vec AnimePublic) query;
   submitAnimeRequest: (requestText: text, username: text) -> (text);
   updateAdConfig: (id: text, input: AdConfigInput) -> (opt AdConfigPublic);
-  updateAnime: (id: text, input: AnimeInput) -> (opt AnimePublic);
+  updateAnime: (adminToken: text, id: text, input: AnimeInput) ->
+   (opt AnimePublic);
   updateEpisode: (adminToken: text, id: text, input: EpisodeInput) ->
    (opt Episode);
   updateSeason: (adminToken: text, id: SeasonId, input: SeasonInput) ->

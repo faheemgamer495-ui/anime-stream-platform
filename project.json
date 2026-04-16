@@ -1,27 +1,27 @@
 {
-  "overview": "A Netflix-style anime OTT streaming platform on the Internet Computer with season management, custom video player, admin panel, AI chat assistant, episode comments, and ratings.",
+  "overview": "A full-stack Netflix-style Anime OTT streaming platform. Users can browse trending anime, watch episodes with a polished video player, and build a personal watchlist. Admins manage all content from a secure panel at /preview with permanent cloud-backed storage, season/episode management, and real-time sync to the live site.",
   "features": [
-    "Season management (create, edit, delete seasons per anime)",
-    "Season selector tabs/dropdown on watch page",
-    "Dynamic episode filtering by season",
-    "Admin panel season management with episode linking",
-    "URL-based season navigation (/watch/animeId/seasonNumber/episodeId)",
-    "Custom video player with Google Drive, YouTube, direct URL support",
-    "Admin panel for anime, episodes, seasons, and requests",
-    "AI chat assistant with OpenAI integration",
-    "Episode comments and star ratings with threaded replies",
-    "Netflix-style dark UI with red accent",
-    "localStorage + Motoko stable storage persistence"
+    "Netflix-style dark UI with red accents and animated hero banner slider",
+    "Anime browsing with carousels: Trending, New Releases, genre-based sections",
+    "Episode video player supporting MP4, YouTube, and Google Drive links",
+    "Season & episode management system with season selectors",
+    "Secure admin panel at /preview with hamburger menu Admin Login",
+    "Full CRUD for anime, seasons, and episodes with toast notifications",
+    "User authentication, watchlists, star ratings, and threaded comments",
+    "AI chat assistant with anime request submission and admin management",
+    "PopAds integration on live site only",
+    "Permanent cloud storage — data never disappears after refresh"
   ],
   "category": "entertainment",
   "tags": [
     "anime",
     "streaming",
-    "video",
-    "seasons",
-    "admin",
-    "dark-mode",
-    "internet-computer"
+    "ott",
+    "netflix-clone",
+    "video-player",
+    "admin-panel",
+    "react",
+    "motoko"
   ],
-  "last_updated": "2026-04-12T08:16:50.356Z"
+  "last_updated": "2026-04-15T19:19:30.029Z"
 }

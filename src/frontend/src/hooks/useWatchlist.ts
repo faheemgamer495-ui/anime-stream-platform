@@ -1,29 +1,33 @@
+/**
+ * useWatchlist — canister-first via AppContext, localStorage cache fallback.
+ *
+ * Watchlist reads from the localStorage cache (kept in sync by AppContext).
+ * Writes attempt the canister first; on failure they update the cache only.
+ */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useAppContext } from "../context/AppContext";
+import { getWatchlist, saveWatchlist } from "../lib/localStorageDB";
 import type { WatchlistEntry } from "../types";
 
-// In-memory watchlist per session (userId → Set of animeIds)
-const watchlistStore = new Map<string, Set<string>>();
-
-function getOrCreate(userId: string): Set<string> {
-  if (!watchlistStore.has(userId)) {
-    watchlistStore.set(userId, new Set());
-  }
-  return watchlistStore.get(userId)!;
-}
-
 export function useWatchlist(userId: string | null) {
+  const { watchlist: ctxWatchlist } = useAppContext();
+
   return useQuery<WatchlistEntry[]>({
     queryKey: ["watchlist", userId],
-    queryFn: async () => {
+    queryFn: () => {
       if (!userId) return [];
-      const ids = Array.from(getOrCreate(userId));
-      return ids.map((animeId) => ({
-        userId,
-        animeId,
-        addedAt: Date.now(),
-      }));
+      // Context watchlist is canister-backed; map to WatchlistEntry format
+      if (ctxWatchlist.length > 0) {
+        return ctxWatchlist.map((animeId) => ({
+          userId: userId,
+          animeId,
+          addedAt: Date.now(),
+        }));
+      }
+      return getWatchlist().filter((e) => e.userId === userId);
     },
     enabled: !!userId,
+    staleTime: 0,
   });
 }
 
@@ -31,24 +35,36 @@ export function useIsInWatchlist(
   userId: string | null,
   animeId: string | undefined,
 ) {
+  const { watchlist: ctxWatchlist } = useAppContext();
+
   return useQuery<boolean>({
     queryKey: ["watchlist", "check", userId, animeId],
-    queryFn: async () => {
+    queryFn: () => {
       if (!userId || !animeId) return false;
-      return getOrCreate(userId).has(animeId);
+      // Prefer context data (canister-backed)
+      if (ctxWatchlist.length >= 0) {
+        return ctxWatchlist.includes(animeId);
+      }
+      return getWatchlist().some(
+        (e) => e.userId === userId && e.animeId === animeId,
+      );
     },
     enabled: !!userId && !!animeId,
+    staleTime: 0,
   });
 }
 
 export function useAddToWatchlist() {
   const queryClient = useQueryClient();
+  const ctx = useAppContext();
+
   return useMutation({
     mutationFn: async ({
       userId,
       animeId,
     }: { userId: string; animeId: string }) => {
-      getOrCreate(userId).add(animeId);
+      // Route through AppContext (canister-first)
+      await ctx.toggleWatchlist(animeId);
       return { userId, animeId };
     },
     onSuccess: ({ userId, animeId }) => {
@@ -62,12 +78,15 @@ export function useAddToWatchlist() {
 
 export function useRemoveFromWatchlist() {
   const queryClient = useQueryClient();
+  const ctx = useAppContext();
+
   return useMutation({
     mutationFn: async ({
       userId,
       animeId,
     }: { userId: string; animeId: string }) => {
-      getOrCreate(userId).delete(animeId);
+      // Route through AppContext (canister-first)
+      await ctx.toggleWatchlist(animeId);
       return { userId, animeId };
     },
     onSuccess: ({ userId, animeId }) => {

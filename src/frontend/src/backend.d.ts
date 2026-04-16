@@ -132,13 +132,14 @@ export interface backendInterface {
     addComment(episodeId: string, text: string, parentId: string | null): Promise<Comment>;
     addRating(episodeId: string, stars: bigint): Promise<string | null>;
     addToWatchlist(animeId: string): Promise<void>;
+    addToWatchlistGuest(_userId: string, _animeId: string): Promise<void>;
     aiChat(userMessage: string, pageContext: string, errorContext: string): Promise<string>;
     createAdConfig(input: AdConfigInput): Promise<AdConfigPublic>;
-    createAnime(input: AnimeInput): Promise<AnimePublic>;
+    createAnime(adminToken: string, input: AnimeInput): Promise<AnimePublic>;
     createEpisode(adminToken: string, input: EpisodeInput): Promise<Episode>;
     createSeason(adminToken: string, input: SeasonInput): Promise<SeasonPublic>;
     deleteAdConfig(id: string): Promise<boolean>;
-    deleteAnime(id: string): Promise<boolean>;
+    deleteAnime(adminToken: string, id: string): Promise<boolean>;
     deleteAnimeRequest(id: string, adminToken: string): Promise<boolean>;
     deleteComment(commentId: string): Promise<boolean>;
     deleteEpisode(adminToken: string, id: string): Promise<boolean>;
@@ -148,6 +149,7 @@ export interface backendInterface {
     getAdsByPlacement(placement: AdPlacement): Promise<Array<AdConfigPublic>>;
     getAllAds(): Promise<Array<AdConfigPublic>>;
     getAllAnime(): Promise<Array<AnimePublic>>;
+    getAllEpisodes(): Promise<Array<Episode>>;
     getAnime(id: string): Promise<AnimePublic | null>;
     getAnimeRequests(adminToken: string): Promise<Array<AnimeRequest>>;
     getCommentsByEpisode(episodeId: string): Promise<Array<Comment>>;
@@ -156,6 +158,7 @@ export interface backendInterface {
     getEpisodesByAnime(animeId: string): Promise<Array<Episode>>;
     getEpisodesBySeason(seasonId: SeasonId): Promise<Array<Episode>>;
     getFeaturedAnime(): Promise<Array<AnimePublic>>;
+    getGuestWatchlist(_userId: string): Promise<Array<string>>;
     getRatingsInfo(episodeId: string): Promise<{
         total: bigint;
         average: number;
@@ -168,14 +171,16 @@ export interface backendInterface {
     incrementAnimeViewCount(id: string): Promise<void>;
     isAdminUser(): Promise<boolean>;
     isInWatchlist(animeId: string): Promise<boolean>;
+    isInWatchlistGuest(_userId: string, _animeId: string): Promise<boolean>;
     listAllUsers(): Promise<Array<UserPublic>>;
     markRequestComplete(id: string, adminToken: string): Promise<boolean>;
     registerUser(input: UserInput): Promise<UserPublic>;
     removeFromWatchlist(animeId: string): Promise<boolean>;
+    removeFromWatchlistGuest(_userId: string, _animeId: string): Promise<boolean>;
     searchAnime(term: string): Promise<Array<AnimePublic>>;
     submitAnimeRequest(requestText: string, username: string): Promise<string>;
     updateAdConfig(id: string, input: AdConfigInput): Promise<AdConfigPublic | null>;
-    updateAnime(id: string, input: AnimeInput): Promise<AnimePublic | null>;
+    updateAnime(adminToken: string, id: string, input: AnimeInput): Promise<AnimePublic | null>;
     updateEpisode(adminToken: string, id: string, input: EpisodeInput): Promise<Episode | null>;
     updateSeason(adminToken: string, id: SeasonId, input: SeasonInput): Promise<SeasonPublic | null>;
     updateUser(input: UserInput): Promise<UserPublic | null>;

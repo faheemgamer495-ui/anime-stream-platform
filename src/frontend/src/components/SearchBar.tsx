@@ -1,5 +1,5 @@
 import { Input } from "@/components/ui/input";
-import { Link } from "@tanstack/react-router";
+import { Link, useNavigate } from "@tanstack/react-router";
 import { Search, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useSearchAnime } from "../hooks/useAnime";
@@ -10,8 +10,9 @@ export default function SearchBar() {
   const [open, setOpen] = useState(false);
   const [debounced, setDebounced] = useState("");
   const containerRef = useRef<HTMLDivElement>(null);
+  const navigate = useNavigate();
 
-  // Debounce
+  // Debounce — 300ms
   useEffect(() => {
     const timer = setTimeout(() => setDebounced(query), 300);
     return () => clearTimeout(timer);
@@ -43,6 +44,18 @@ export default function SearchBar() {
     setOpen(false);
   };
 
+  // Navigate to homepage with query pre-filled on Enter
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter" && query.trim()) {
+      setOpen(false);
+      // Navigate to homepage — the homepage search bar will handle filtering
+      navigate({ to: "/" });
+    }
+    if (e.key === "Escape") {
+      clear();
+    }
+  };
+
   return (
     <div ref={containerRef} className="relative w-full" data-ocid="search-bar">
       <div className="relative">
@@ -53,8 +66,10 @@ export default function SearchBar() {
           value={query}
           onChange={(e) => handleChange(e.target.value)}
           onFocus={() => query.length > 1 && setOpen(true)}
+          onKeyDown={handleKeyDown}
           className="pl-9 pr-8 bg-secondary/50 border-border focus:border-primary/50 placeholder:text-muted-foreground text-foreground"
           data-ocid="search-input"
+          aria-label="Search anime"
         />
         {query && (
           <button
@@ -91,12 +106,16 @@ export default function SearchBar() {
                   src={anime.thumbnailUrl}
                   alt={anime.title}
                   className="w-10 h-14 object-cover rounded shrink-0"
+                  onError={(e) => {
+                    (e.target as HTMLImageElement).src =
+                      "https://images.unsplash.com/photo-1578632767115-351597cf2477?w=80&h=112&fit=crop";
+                  }}
                 />
                 <div className="min-w-0">
                   <p className="font-semibold text-sm text-foreground truncate group-hover:text-primary transition-colors">
                     {anime.title}
                   </p>
-                  <p className="text-xs text-muted-foreground">
+                  <p className="text-xs text-muted-foreground truncate">
                     {anime.genre.join(", ")}
                   </p>
                   <p className="text-xs text-muted-foreground">

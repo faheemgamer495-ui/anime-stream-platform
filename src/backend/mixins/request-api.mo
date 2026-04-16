@@ -1,36 +1,26 @@
-import RequestTypes "../types/request";
-import RequestLib "../lib/request";
 import Runtime "mo:core/Runtime";
+import RequestTypes "../types/request";
 
-/// Anime request mixin — exposes public endpoints for submitting and managing anime requests.
+/// Anime request API contract — array-based, matches main.mo stable-var pattern.
+/// NOTE: Not included in main.mo; methods are inline there. Reference only.
 mixin (animeRequests : [RequestTypes.AnimeRequest]) {
-
   /// Submit a new anime request. Returns the generated request id.
   public shared func submitAnimeRequest(requestText : Text, username : Text) : async Text {
-    let (req, newRequests) = RequestLib.createRequest(animeRequests, requestText, username);
-    animeRequests := newRequests;
-    req.id;
+    Runtime.trap("not implemented");
   };
 
   /// Get all anime requests. Admin only — requires valid adminToken.
   public query func getAnimeRequests(adminToken : Text) : async [RequestTypes.AnimeRequest] {
-    if (adminToken != "adminfaheem123") Runtime.trap("Unauthorized");
-    RequestLib.getAllRequests(animeRequests);
+    Runtime.trap("not implemented");
   };
 
   /// Mark a request as completed. Admin only — requires valid adminToken.
   public shared func markRequestComplete(id : Text, adminToken : Text) : async Bool {
-    if (adminToken != "adminfaheem123") Runtime.trap("Unauthorized");
-    let (found, newRequests) = RequestLib.completeRequest(animeRequests, id);
-    animeRequests := newRequests;
-    found;
+    Runtime.trap("not implemented");
   };
 
   /// Delete a request. Admin only — requires valid adminToken.
   public shared func deleteAnimeRequest(id : Text, adminToken : Text) : async Bool {
-    if (adminToken != "adminfaheem123") Runtime.trap("Unauthorized");
-    let (deleted, newRequests) = RequestLib.deleteRequest(animeRequests, id);
-    animeRequests := newRequests;
-    deleted;
+    Runtime.trap("not implemented");
   };
 };

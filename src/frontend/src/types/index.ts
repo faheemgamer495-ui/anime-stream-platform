@@ -12,6 +12,7 @@ export interface Anime {
   releaseYear: number;
   status: "ongoing" | "completed" | "upcoming";
   createdAt: number;
+  publishedAt?: bigint;
 }
 
 export interface Episode {
@@ -25,6 +26,7 @@ export interface Episode {
   thumbnailUrl: string;
   createdAt: number;
   seasonId?: string;
+  publishedAt?: bigint;
 }
 
 export interface Season {
@@ -33,6 +35,7 @@ export interface Season {
   seasonNumber: number;
   name: string;
   createdAt: number;
+  publishedAt?: bigint;
 }
 
 export interface SeasonFormData {
@@ -48,6 +51,20 @@ export interface User {
   createdAt: number;
   isAdmin: boolean;
 }
+
+export interface UserSession {
+  userId: string;
+  username: string;
+  role: "user";
+}
+
+export interface AdminSession {
+  adminId: string;
+  username: string;
+  role: "admin";
+}
+
+export type AppMode = "preview" | "live";
 
 export interface WatchlistEntry {
   userId: string;

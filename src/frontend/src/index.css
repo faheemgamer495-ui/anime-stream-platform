@@ -9,29 +9,29 @@
     --font-mono: "JetBrains Mono";
     --radius: 0.5rem;
 
-    --background: 0.1 0 0;
-    --foreground: 0.95 0 0;
-    --card: 0.15 0 0;
-    --card-foreground: 0.95 0 0;
-    --popover: 0.18 0 0;
-    --popover-foreground: 0.95 0 0;
+    --background: 0.08 0 0;
+    --foreground: 0.98 0 0;
+    --card: 0.13 0 0;
+    --card-foreground: 0.98 0 0;
+    --popover: 0.16 0 0;
+    --popover-foreground: 0.98 0 0;
 
     --primary: 0.52 0.23 23;
-    --primary-foreground: 0.95 0 0;
+    --primary-foreground: 0.98 0 0;
 
-    --secondary: 0.2 0.01 0;
+    --secondary: 0.18 0.01 0;
     --secondary-foreground: 0.85 0 0;
-    --muted: 0.2 0.01 0;
-    --muted-foreground: 0.55 0 0;
+    --muted: 0.18 0.01 0;
+    --muted-foreground: 0.6 0 0;
 
     --accent: 0.52 0.23 23;
-    --accent-foreground: 0.95 0 0;
+    --accent-foreground: 0.98 0 0;
 
     --destructive: 0.55 0.22 25;
-    --destructive-foreground: 0.95 0 0;
+    --destructive-foreground: 0.98 0 0;
 
-    --border: 0.25 0.01 0;
-    --input: 0.25 0.01 0;
+    --border: 0.22 0.01 0;
+    --input: 0.22 0.01 0;
     --ring: 0.52 0.23 23;
 
     --chart-1: 0.65 0.22 40;
@@ -51,29 +51,29 @@
   }
 
   .dark {
-    --background: 0.1 0 0;
-    --foreground: 0.95 0 0;
-    --card: 0.15 0 0;
-    --card-foreground: 0.95 0 0;
-    --popover: 0.18 0 0;
-    --popover-foreground: 0.95 0 0;
+    --background: 0.08 0 0;
+    --foreground: 0.98 0 0;
+    --card: 0.13 0 0;
+    --card-foreground: 0.98 0 0;
+    --popover: 0.16 0 0;
+    --popover-foreground: 0.98 0 0;
 
     --primary: 0.52 0.23 23;
-    --primary-foreground: 0.95 0 0;
+    --primary-foreground: 0.98 0 0;
 
-    --secondary: 0.2 0.01 0;
+    --secondary: 0.18 0.01 0;
     --secondary-foreground: 0.85 0 0;
-    --muted: 0.2 0.01 0;
-    --muted-foreground: 0.55 0 0;
+    --muted: 0.18 0.01 0;
+    --muted-foreground: 0.6 0 0;
 
     --accent: 0.52 0.23 23;
-    --accent-foreground: 0.95 0 0;
+    --accent-foreground: 0.98 0 0;
 
     --destructive: 0.55 0.22 25;
-    --destructive-foreground: 0.95 0 0;
+    --destructive-foreground: 0.98 0 0;
 
-    --border: 0.25 0.01 0;
-    --input: 0.25 0.01 0;
+    --border: 0.22 0.01 0;
+    --input: 0.22 0.01 0;
     --ring: 0.52 0.23 23;
 
     --chart-1: 0.49 0.24 264;
@@ -119,21 +119,45 @@
 }
 
 @layer utilities {
+  /* Transitions */
   .transition-smooth {
     transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   }
 
+  .transition-fast {
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .transition-slow {
+    transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  /* Hover & Interaction */
   .scale-hover {
     transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow
-      0.3s ease;
+      0.3s cubic-bezier(0.4, 0, 0.2, 1);
   }
 
   .scale-hover:hover {
     transform: scale(1.05);
+    box-shadow: 0 0 24px oklch(var(--accent) / 0.35);
   }
 
+  .card-hover {
+    @apply transition-smooth cursor-pointer;
+  }
+
+  .card-hover:hover {
+    background-color: hsl(var(--card) / 0.8);
+  }
+
+  /* Accent Effects */
   .glow-accent {
-    box-shadow: 0 0 20px rgba(229, 9, 20, 0.3);
+    box-shadow: 0 0 20px oklch(var(--accent) / 0.3);
+  }
+
+  .glow-accent-strong {
+    box-shadow: 0 0 24px oklch(var(--accent) / 0.4);
   }
 
   .accent-underline {
@@ -149,5 +173,159 @@
     width: 100%;
     height: 3px;
     background: oklch(var(--accent));
+    transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .accent-stripe {
+    border-left: 4px solid oklch(var(--accent));
+  }
+
+  /* Season & Episode Components */
+  .season-selector-tab {
+    @apply px-4 py-2 rounded-md transition-smooth;
+  }
+
+  .season-selector-tab.active {
+    @apply bg-accent text-accent-foreground;
+  }
+
+  .season-selector-tab.inactive {
+    @apply text-muted-foreground hover:text-foreground;
+  }
+
+  .episode-item {
+    @apply transition-smooth hover:bg-muted/50;
+  }
+
+  .episode-item-hover-highlight {
+    background-color: hsl(var(--card) / 0.6);
+    @apply border-l-2 border-accent pl-4;
+  }
+
+  /* Hero Banner Slider Controls */
+  .hero-slider-nav {
+    @apply absolute top-1/2 -translate-y-1/2 z-20 w-12 h-12 rounded-full bg-black/40 hover:bg-black/60 text-foreground transition-smooth flex items-center justify-center cursor-pointer;
+  }
+
+  .hero-slider-nav:hover {
+    box-shadow: 0 0 16px oklch(var(--accent) / 0.25);
+  }
+
+  .hero-dot-indicator {
+    @apply w-2 h-2 rounded-full bg-foreground/40 transition-smooth cursor-pointer;
+  }
+
+  .hero-dot-indicator.active {
+    @apply w-3 h-3 bg-accent glow-accent;
+  }
+
+  .hero-dot-indicator:hover {
+    @apply bg-foreground/70;
+  }
+
+  /* Admin Mode Styles (Preview Only) */
+  .admin-badge {
+    @apply inline-block px-3 py-1 bg-accent text-accent-foreground text-xs font-semibold rounded-full glow-accent-strong;
+    letter-spacing: 0.05em;
+  }
+
+  .admin-toolbar {
+    @apply sticky top-0 z-40 bg-card border-b border-border px-4 py-3 flex items-center justify-between shadow-subtle;
+  }
+
+  .admin-toolbar-action {
+    @apply px-3 py-2 text-sm font-medium rounded-md bg-accent text-accent-foreground transition-smooth hover:glow-accent-strong;
+  }
+
+  .admin-toolbar-action.secondary {
+    @apply bg-muted text-muted-foreground hover:bg-muted/80 hover:text-foreground;
+  }
+
+  .edit-overlay {
+    @apply absolute inset-0 opacity-0 hover:opacity-100 transition-smooth flex items-center justify-center bg-black/40 rounded-md;
+  }
+
+  .edit-overlay button {
+    @apply px-3 py-2 bg-accent text-accent-foreground text-sm font-semibold rounded-md hover:glow-accent-strong;
+  }
+
+  .preview-indicator {
+    @apply fixed bottom-4 right-4 px-4 py-2 bg-accent text-accent-foreground text-sm font-semibold rounded-md shadow-card-lift glow-accent;
+  }
+
+  /* Save State Indicators */
+  .save-state-indicator {
+    @apply inline-flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-md transition-smooth;
+  }
+
+  .save-state-saved {
+    @apply bg-green-500/20 text-green-300;
+  }
+
+  .save-state-saving {
+    @apply bg-accent/20 text-accent animate-pulse;
+  }
+
+  .save-state-error {
+    @apply bg-destructive/20 text-destructive;
+  }
+
+  .save-state-icon {
+    @apply inline-block w-4 h-4 flex-shrink-0;
+  }
+
+  /* Toast Notification Styles */
+  .toast-container {
+    @apply fixed bottom-4 right-4 z-50 flex flex-col gap-2 pointer-events-none;
+  }
+
+  .toast {
+    @apply max-w-sm bg-card border border-border rounded-md p-4 shadow-card-lift pointer-events-auto transition-smooth;
+  }
+
+  .toast.success {
+    @apply border-green-500/30 bg-green-500/5;
+  }
+
+  .toast.error {
+    @apply border-destructive/30 bg-destructive/5;
+  }
+
+  .toast.info {
+    @apply border-accent/30 bg-accent/5;
+  }
+
+  /* Video Player Controls */
+  .player-control-bar {
+    @apply absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-4 transition-opacity;
+  }
+
+  .player-control-button {
+    @apply w-10 h-10 rounded-md bg-white/10 hover:bg-white/20 text-foreground transition-smooth flex items-center justify-center cursor-pointer;
+  }
+
+  .player-control-button:hover {
+    box-shadow: 0 0 12px oklch(var(--accent) / 0.2);
+  }
+
+  .player-progress-bar {
+    @apply h-1 bg-white/20 rounded-full cursor-pointer hover:h-1.5 transition-all;
+  }
+
+  .player-progress-bar-fill {
+    @apply h-full bg-accent rounded-full transition-all;
+  }
+
+  /* Episode Sidebar */
+  .episode-sidebar {
+    @apply max-h-[60vh] overflow-y-auto;
+  }
+
+  .episode-sidebar-item {
+    @apply p-3 border-l-2 border-transparent transition-smooth hover:bg-muted/40 hover:border-accent cursor-pointer;
+  }
+
+  .episode-sidebar-item.current {
+    @apply bg-accent/10 border-accent;
   }
 }

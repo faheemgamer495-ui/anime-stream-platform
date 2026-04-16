@@ -5,7 +5,7 @@ import { Bookmark, BookmarkX, Play, Tv2 } from "lucide-react";
 import { motion } from "motion/react";
 import { useEffect } from "react";
 import AnimeCard from "../components/AnimeCard";
-import { useAllAnime } from "../hooks/useAnime";
+import { useLiveAllAnime } from "../hooks/useAnime";
 import { useAuth } from "../hooks/useAuth";
 import { useRemoveFromWatchlist, useWatchlist } from "../hooks/useWatchlist";
 import type { Anime } from "../types";
@@ -33,7 +33,6 @@ function EmptyWatchlist() {
       className="bg-card border border-border rounded-2xl py-24 text-center space-y-6"
       data-ocid="empty-watchlist"
     >
-      {/* Illustration */}
       <div className="flex justify-center">
         <div className="relative">
           <div className="w-24 h-24 bg-primary/10 rounded-full flex items-center justify-center">
@@ -74,7 +73,8 @@ function EmptyWatchlist() {
 export default function WatchlistPage() {
   const { isLoggedIn, principalId, isInitializing } = useAuth();
   const navigate = useNavigate();
-  const { data: allAnime = [], isLoading: isAnimeLoading } = useAllAnime();
+  // Use live store for anime details
+  const { data: allAnime = [], isLoading: isAnimeLoading } = useLiveAllAnime();
   const { data: watchlistEntries = [], isLoading: isWatchlistLoading } =
     useWatchlist(principalId);
   const removeFromWatchlist = useRemoveFromWatchlist();
@@ -82,13 +82,12 @@ export default function WatchlistPage() {
   // Redirect to login if not authenticated
   useEffect(() => {
     if (!isInitializing && !isLoggedIn) {
-      navigate({ to: "/login" });
+      void navigate({ to: "/login" });
     }
   }, [isLoggedIn, isInitializing, navigate]);
 
   const isLoading = isAnimeLoading || isWatchlistLoading || isInitializing;
 
-  // Build watchlist anime list: match watchlist entries to full anime objects
   const watchlistAnimeIds = new Set(watchlistEntries.map((e) => e.animeId));
   const watchlistAnime: Anime[] = allAnime.filter((a) =>
     watchlistAnimeIds.has(a.id),
@@ -99,7 +98,6 @@ export default function WatchlistPage() {
     removeFromWatchlist.mutate({ userId: principalId, animeId });
   };
 
-  // Show loading state while auth is being determined
   if (isInitializing) {
     return (
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
@@ -112,7 +110,7 @@ export default function WatchlistPage() {
     );
   }
 
-  if (!isLoggedIn) return null; // redirect in effect
+  if (!isLoggedIn) return null;
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
@@ -190,7 +188,6 @@ export default function WatchlistPage() {
                 isInWatchlist
                 onWatchlistToggle={handleRemove}
               />
-              {/* Remove overlay label */}
               <div className="absolute bottom-[4.5rem] left-0 right-0 flex justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none">
                 <span className="bg-black/80 text-xs text-muted-foreground px-2 py-0.5 rounded-sm">
                   Hover card to remove
